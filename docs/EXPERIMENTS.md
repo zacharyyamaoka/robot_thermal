@@ -31,6 +31,12 @@ the observer's v2 parameter set.
 torque, so the pendulum stays where it hangs and no gravity pose or hard stop is needed. Positive d (field
 strengthening) carries no demagnetisation risk. The rotor must already be at rest.
 
+**The rack's supply has no regen sink** (it dropped out at 04:32Z on 2026-11-21 when a pendulum climb pumped its 24 V
+bus to 27-31 V; the rack is down until Zach power-cycles it). E1 regenerates nothing mechanical: every step holds the
+rotor still, so there is no −τ·ω to return, and a d current switched off returns only its inductive energy
+(½·L·I², about 0.1 J at 20 A on a JMC). Still log the bus voltage and abort above 28 V. `servo.max_regen_power_W` 0
+for the run is harmless if the rig's owner wants it (it only acts on regeneration).
+
 **Log, at 10 Hz or faster, for the whole run:** t (s, monotonic), mode, fault, position, velocity, q_A, d_A, board
 temperature (°C), bus voltage, and every resistance check's voltages and currents (below).
 
@@ -64,7 +70,7 @@ press into the stop at the same current is an equivalent alternative if d-axis c
 simulation shows plain E1 narrows the board's heat capacity and board-to-ambient conductance only to ~0.67 of
 their prior; a square wave near the board's ~2 min time constant separates it from the housing's ~13 min.
 
-**Abort (stop current, log why):** board ≥ 60 °C (where moteus starts its own derate), winding by resistance
+**Abort (stop current, log why):** bus ≥ 28 V (the rack's 24 V supply has no regen sink), board ≥ 60 °C (where moteus starts its own derate), winding by resistance
 ≥ 90 °C (R ≥ 1.25 × R₀ from 25 °C), any fault, any motion over 2° at the output during a d-axis step.
 
 **Hand-over:** the log as one `.npy` + columns `.json` (like `jtc_ticks.npy`), or CSV, plus which drive and motor ran
