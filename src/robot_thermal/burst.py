@@ -28,6 +28,7 @@ from robot_thermal.burst_state import BurstState
 from robot_thermal.burst_verdict import BurstVerdict
 
 __all__ = [
+    "flux_brake_heat_w",
     "BurstRule",
     "BurstState",
     "BurstVerdict",
@@ -40,6 +41,17 @@ __all__ = [
 ]
 
 
+def flux_brake_heat_w(torque_nm: float, velocity_rad_s: float) -> float:
+    """W of regenerated power, max(0, −τ·ω): an upper bound on what flux braking burns in the winding.
+
+    WHY: with `servo.max_regen_power_W` 0 (J2's setting), moteus cannot push regenerated energy onto the bus, so it
+    burns it as d-axis current in the winding (limiter code 104, mjbots' "limited torque" table). The logs carry q
+    current but not d, so a bucket fed |q| alone misses that heat. The regenerated electrical power cannot exceed the
+    mechanical power flowing back in, so −τ·ω from the logged torque and velocity bounds it.
+    """
+    return max(0.0, -float(torque_nm) * float(velocity_rad_s))
+
+
 def heat_rate_a2_per_s(rule: BurstRule, current_a: float) -> float:
     """A²/s the bucket fills (+) or empties (−) at while the drive carries `current_a`."""
     i2 = current_a * current_a
@@ -49,8 +61,12 @@ def heat_rate_a2_per_s(rule: BurstRule, current_a: float) -> float:
     return -min(rule.refill_cap_a2_per_s, ic2 - i2)
 
 
-def update(rule: BurstRule, state: BurstState, t_s: float, current_a: float, board_c: float | None = None) -> BurstState:
+def update(rule: BurstRule, state: BurstState, t_s: float, current_a: float, board_c: float | None = None,
+           extra_heat_w: float = 0.0) -> BurstState:
     """The state after one sample. `current_a` is the magnitude; `board_c` None keeps the last board reading.
+
+    `extra_heat_w` is winding heat the current does not show (flux braking: `flux_brake_heat_w(τ, ω)`); it counts as
+    the current that would make it, I² = W / (1.5·R), so it needs `rule.phase_resistance_ohm`.
 
     WHY the larger of the two samples' I² over the interval: between two samples the current is unknown, and the
     larger one is the conservative guess for a protection rule (it over-counts heat and under-counts cooling).
@@ -60,6 +76,10 @@ def update(rule: BurstRule, state: BurstState, t_s: float, current_a: float, boa
     current_a = abs(float(current_a))
     if not math.isfinite(current_a):
         raise ValueError(f"{rule.name}: current must be finite, got {current_a}")
+    if extra_heat_w > 0.0:
+        if not rule.phase_resistance_ohm:
+            raise ValueError(f"{rule.name}: extra_heat_w needs rule.phase_resistance_ohm")
+        current_a = math.sqrt(current_a * current_a + extra_heat_w / (1.5 * rule.phase_resistance_ohm))
     dt = 0.0 if state.t_s is None else max(0.0, float(t_s) - state.t_s)
     t_new = float(t_s) if state.t_s is None else max(float(t_s), state.t_s)
     worst = max(current_a, state.current_a) if state.t_s is not None else current_a

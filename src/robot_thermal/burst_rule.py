@@ -24,12 +24,16 @@ class BurstRule:
     """
 
     name: str
-    continuous_current_a: float  # A: what the winding may carry forever (the rated current, derated)
+    continuous_current_a: float  # A: what the drive may carry forever: the smallest cited continuous rating in the path
     peak_current_a: float  # A: the full-strength burst current (usually the board's servo.max_current_A)
     burst_s: float = 5.0  # s: how long a burst at peak_current_a may last from a full budget
     period_s: float = 60.0  # s: at most one full burst per period; the budget refills no faster than this
-    board_burst_off_c: float = 55.0  # °C: measured board temperature at which bursts stop
-    board_burst_on_c: float = 50.0  # °C: bursts resume once the board has cooled below this (hysteresis)
+    # °C: measured board temperature at which bursts stop. The default is where moteus starts its own derate on the
+    # rig's boards (fault_temperature 80 − temperature_margin 20); a drive record cites its own board's value
+    board_burst_off_c: float = 60.0
+    board_burst_on_c: float = 55.0  # °C: bursts re-arm below this; hysteresis, not a cap
+    # Ω per phase: only needed to count heat the q current does not show (flux braking), as I² = W / (1.5·R)
+    phase_resistance_ohm: float | None = None
     source: str = ""  # where the numbers come from
 
     def __post_init__(self) -> None:

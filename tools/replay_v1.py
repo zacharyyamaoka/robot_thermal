@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-from robot_thermal.burst import BurstState, update, verdict
+from robot_thermal.burst import BurstState, flux_brake_heat_w, update, verdict
 from robot_thermal.drives.arm import HOLD_CURRENT_A, RULES
 
 CAN = {"J1": 11, "J2": 12, "C1": 13, "W1": 14, "W2": 15, "W3": 16, "CLAW": 17}
@@ -28,9 +28,13 @@ def main(run_dir: str) -> None:
     for joint, can in CAN.items():
         rule = RULES[joint]
         cur, temp = d[f"can{can}_q_current_a"], d[f"can{can}_temperature_c"]
+        tau, vel = d[f"can{can}_torque_nm"], d[f"can{can}_velocity_rad_s"]
         state, worst_pct, blocked = BurstState(), 100.0, 0
         for k in range(len(t)):
-            state = update(rule, state, float(t[k]), float(cur[k]), float(temp[k]))
+            # WHY the regen term: a board with max_regen_power_W 0 burns regenerated power in the winding as d current
+            # (flux braking), which the log's q current does not show; −τ·ω bounds it
+            state = update(rule, state, float(t[k]), float(cur[k]), float(temp[k]),
+                           extra_heat_w=flux_brake_heat_w(float(tau[k]), float(vel[k])))
             v = verdict(rule, state, HOLD_CURRENT_A[joint])
             worst_pct = min(worst_pct, v.budget_left_pct)
             blocked += not v.may_burst

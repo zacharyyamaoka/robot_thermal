@@ -179,3 +179,16 @@ def test_update_all_tracks_every_arm_drive():
     assert states["J2"].heat_a2s == pytest.approx(28.1**2 - 12.0**2)
     assert arm.RULES["J2"].peak_current_a == pytest.approx(18.0 / 0.7396, rel=1e-6)
     assert states["J1"] == BurstState()
+
+
+def test_flux_braking_heat_counts_as_the_current_that_would_make_it():
+    from robot_thermal.burst import flux_brake_heat_w
+
+    j2 = arm.RULES["J2"]
+    assert flux_brake_heat_w(10.0, 1.0) == 0.0  # motoring: nothing comes back
+    assert flux_brake_heat_w(10.0, -1.0) == pytest.approx(10.0)  # lowering against gravity: 10 W back
+    a = update(j2, update(j2, BurstState(), 0.0, 13.0), 1.0, 13.0)
+    b = update(j2, update(j2, BurstState(), 0.0, 13.0), 1.0, 13.0, extra_heat_w=20.0)
+    assert b.heat_a2s - a.heat_a2s == pytest.approx(20.0 / (1.5 * j2.phase_resistance_ohm), rel=1e-9)
+    with pytest.raises(ValueError):
+        update(JMC, BurstState(), 0.0, 1.0, extra_heat_w=5.0)  # the type rule carries no resistance

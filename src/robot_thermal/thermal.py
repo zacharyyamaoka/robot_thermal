@@ -18,8 +18,9 @@ W, H, B, A = 0, 1, 2, 3  # state indices
 NODES = ("winding", "housing", "board", "ambient")
 
 
-def matrices(p: ThermalParams, current_a: float) -> tuple[la.Mat, la.Vec]:
-    """(A, b) with dx/dt = A·x + b at a constant current (A: phase-current amplitude)."""
+def matrices(p: ThermalParams, current_a: float, extra_winding_w: float = 0.0) -> tuple[la.Mat, la.Vec]:
+    """(A, b) with dx/dt = A·x + b at a constant current (A: phase-current amplitude), plus `extra_winding_w` of
+    winding heat the current does not show (flux braking)."""
     i2 = current_a * current_a
     cw, ch, cb = p.winding_heat_capacity_j_per_k, p.housing_heat_capacity_j_per_k, p.board_heat_capacity_j_per_k
     gwh, gha = p.winding_to_housing_w_per_k, p.housing_to_ambient_w_per_k
@@ -32,7 +33,7 @@ def matrices(p: ThermalParams, current_a: float) -> tuple[la.Mat, la.Vec]:
         [0.0, 0.0, 0.0, 0.0],
     ]
     b = [
-        k_cu * (1.0 - p.copper_alpha_per_k * p.resistance_ref_c) / cw,
+        (k_cu * (1.0 - p.copper_alpha_per_k * p.resistance_ref_c) + extra_winding_w) / cw,
         0.0,
         (p.board_loss_w_per_a2 * i2 + p.board_idle_w) / cb,
         0.0,
@@ -55,12 +56,12 @@ def max_substep_s(p: ThermalParams) -> float:
     return min(1.0, 0.1 * fastest)
 
 
-def step(p: ThermalParams, x: Sequence[float], current_a: float, dt: float) -> list[float]:
+def step(p: ThermalParams, x: Sequence[float], current_a: float, dt: float, extra_winding_w: float = 0.0) -> list[float]:
     """x after `dt` seconds at a constant current (forward Euler in substeps of at most max_substep_s)."""
     x = list(x)
     if dt <= 0:
         return x
-    a, b = matrices(p, current_a)
+    a, b = matrices(p, current_a, extra_winding_w)
     n = max(1, math.ceil(dt / max_substep_s(p)))
     h = dt / n
     for _ in range(n):

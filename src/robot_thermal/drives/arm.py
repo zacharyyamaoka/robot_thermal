@@ -19,14 +19,22 @@ KT_OUT_NM_PER_A = {"J1": 0.7265, "J2": 0.7396, "C1": 0.7906, "W1": 0.5252, "W2":
                    "CLAW": 0.5161}
 
 
+# Ω per phase, for counting flux-braking heat. SOURCE: J1/J2/C1/CLAW the boards' motor.resistance_ohm in the
+# fivebar-bench deployment.json; W1 0.6305 and, for W2/W3, the low end (0.625) of the arm wrists' calibrated
+# 0.625-0.642 Ω (wrist datasheet check): a lower R counts a watt as more I², the cautious side of a measured range.
+PHASE_RESISTANCE_OHM = {"J1": 0.0871016, "J2": 0.080294, "C1": 0.086851, "W1": 0.6305, "W2": 0.625, "W3": 0.625,
+                        "CLAW": 0.669335}
+
+
 def _shoulder(name: str):
-    return replace(jmc_60asm400_ad60.rule, name=name, peak_current_a=GEARBOX_MAX_NM / KT_OUT_NM_PER_A[name])
+    return replace(jmc_60asm400_ad60.rule, name=name, peak_current_a=GEARBOX_MAX_NM / KT_OUT_NM_PER_A[name],
+                   phase_resistance_ohm=PHASE_RESISTANCE_OHM[name])
 
 
 def _wrist(name: str):
     kt = KT_OUT_NM_PER_A[name]
     return replace(gim4305_10.rule, name=name, continuous_current_a=GIM_NOMINAL_NM / kt,
-                   peak_current_a=GIM_STALL_NM / kt)
+                   peak_current_a=GIM_STALL_NM / kt, phase_resistance_ohm=PHASE_RESISTANCE_OHM[name])
 
 
 RULES = {

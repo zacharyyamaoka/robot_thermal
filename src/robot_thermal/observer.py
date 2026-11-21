@@ -57,7 +57,7 @@ def start(
 
 
 def _predict(p: ThermalParams, hot: ThermalParams, s: ObserverState, t_s: float, current_a: float,
-             config: ObserverConfig) -> tuple[list[float], list[list[float]], list[float]]:
+             config: ObserverConfig, extra_heat_w: float = 0.0) -> tuple[list[float], list[list[float]], list[float]]:
     dt = max(0.0, float(t_s) - s.t_s)
     x = list(s.mean_c)
     cov = [list(r) for r in s.cov]
@@ -70,7 +70,7 @@ def _predict(p: ThermalParams, hot: ThermalParams, s: ObserverState, t_s: float,
     a, _ = th.matrices(p, i_eff)
     n = max(1, math.ceil(dt / th.max_substep_s(p)))
     h = dt / n
-    p_cu = th.copper_loss_w(p, x[th.W], i_eff)
+    p_cu = th.copper_loss_w(p, x[th.W], i_eff) + extra_heat_w
     p_board = p.board_loss_w_per_a2 * i_eff**2 + p.board_idle_w
     q = (
         config.winding_noise_k2_per_s
@@ -85,8 +85,8 @@ def _predict(p: ThermalParams, hot: ThermalParams, s: ObserverState, t_s: float,
         fc = [[sum(f[i][k] * cov[k][j] for k in range(4)) for j in range(4)] for i in range(4)]
         cov = [[sum(fc[i][k] * f[j][k] for k in range(4)) + (q[i] * h if i == j else 0.0) for j in range(4)]
                for i in range(4)]
-    x = th.step(p, x, i_eff, dt)
-    hot_x = th.step(hot, hot_x, i_eff, dt)
+    x = th.step(p, x, i_eff, dt, extra_heat_w)
+    hot_x = th.step(hot, hot_x, i_eff, dt, extra_heat_w)
     return x, cov, hot_x
 
 
@@ -117,13 +117,15 @@ def update(
     winding_c: float | None = None,
     housing_c: float | None = None,
     config: ObserverConfig = DEFAULT,
+    extra_heat_w: float = 0.0,
 ) -> ObserverState:
     """Predict to `t_s` on the current since the last update, then fuse whichever measurements are given.
 
-    `current_a` is the phase-current magnitude √(i_q² + i_d²) at `t_s`.
+    `current_a` is the phase-current magnitude √(i_q² + i_d²) at `t_s`. `extra_heat_w` is winding heat the current
+    does not show, e.g. `burst.flux_brake_heat_w(τ, ω)` when d current is not logged.
     """
     current_a = abs(float(current_a))
-    x, cov, hot_x = _predict(p, hot, s, t_s, current_a, config)
+    x, cov, hot_x = _predict(p, hot, s, t_s, current_a, config, extra_heat_w)
     if board_c is not None and math.isfinite(board_c):
         _correct(x, cov, th.B, float(board_c), config.board_sd_c)
     direct = False
