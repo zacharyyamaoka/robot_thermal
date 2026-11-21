@@ -6,28 +6,53 @@ already know to lower that."*
 
 **Per drive, every tick, keep one I²t bucket in A²·s, fed with |q current| (moteus `q_A`, the phase-current
 amplitude): when |I| > I_cont add (I² − I_cont²)·dt; when |I| ≤ I_cont subtract min(C / 55 s, I_cont² − I²)·dt,
-never below 0; C = (I_peak² − I_cont²) · 5 s. While the bucket is below C and the board is cool the drive may command
-up to I_peak; once the bucket reaches C, or the drive's measured board temperature reaches 55 °C (released below
-50 °C), clamp that drive to I_cont (torque I_cont·kt) until the bucket is empty again.** Shoulders J1/J2/C1 (JMC
-60ASM400 + AD60 10:1): I_cont 14 A (JMC's drawing rates 14.5 A RMS = 20.5 A amplitude, taken ×0.68), I_peak 28.1 A
-(the 18 N·m gearbox cap, the boards' `servo.max_current_A`), C 2,968 A²·s: 5 s at 28.1 A, refilled in 55 s at rest,
-and a full-strength 5 s burst every 60 s can run forever. Wrists and claw (GIM4305-10): I_cont 1.5 A (rated
-1.05 N·m / 0.5087 N·m/A = 2.06 A, ×0.75), I_peak 4.5 A (2.29 N·m), C 90 A²·s: 5 s at 4.5 A, refilled in 55 s; at
-today's 2.0 A board cap a wrist may sit at 2.0 A for 51 s before it folds back to 1.5 A. The boards derate themselves
-from 60 °C (`fault_temperature` 80 − `temperature_margin` 20, reaching 0 A near 72 °C on the JMC boards), so the
-55 °C cut ends bursts before the board throttles them. Tonight's 1.0 run (job `1120-175952-740f`) never touches a
-bucket: J2 peaks at 11.6 A, every drive keeps 100 % of its budget. No winding temperature is measured
-(`servo.enable_motor_temperature` 0), so these are datasheet numbers with a margin, checked against v2's pessimistic
-thermal model, not a measurement.
+never below 0; C = (I_peak² − I_cont²) · 5 s. While the bucket is below C and the board is below 60 °C the drive may
+command up to I_peak; once the bucket reaches C, or the drive's measured board temperature reaches 60 °C (re-armed
+below 55 °C), clamp that drive to I_cont (torque I_cont·kt) until the bucket is empty again.** Shoulders J1/J2/C1:
+I_cont 20.5 A, I_peak 28.1 A, C 1,847 A²·s: 5 s at 28.1 A, refilled in 55 s at rest, repeatable forever. Wrists and
+claw: I_cont 2.06 A, I_peak 7.5 A, C 260 A²·s: 5 s at 7.5 A, refilled in 61 s at rest. At 3.6× continuous the
+copper's cooling, not the minute, sets that refill. Today's 2.0 A wrist board cap sits below I_cont, so the wrists
+cannot spend budget until that cap is raised. Tonight's 1.0 run (job `1120-175952-740f`) never touches a bucket.
 
-**Changed the same night (the commit after cbda40e that adds `tests/test_v1_v2.py`):** the first version said I_cont 15 A on the shoulders
-and I_peak 7.5 A (the maker's peak torque) on the wrists. v2's hot bound showed a full burst from a long hold at
-I_cont in a 30 °C room would take a GIM winding to its 85 °C limit in 1.8 s at 7.5 A, and a JMC to 110 °C in 4.5 s
-from a 15 A hold; at 4.5 A and 14 A they get 5.8 s and 12 s (`tests/test_v1_v2.py`).
+## Where every number comes from
+
+Zach's standing rule (2026-11-20, `Settings/Memory/feedback_no_artificial_guards.md`): a cap cites a datasheet, a
+measured limit, or his words. Nothing in the shipped rule is an agent-picked margin.
+
+| constant | value | source |
+|---|---|---|
+| burst length, period | 5 s per 60 s | Zach, 2026-11-20 (quoted above) |
+| JMC I_cont | 20.5 A | JMC's drawing for the 60ASM400-5-1024C: rated 14.5 A RMS phase current, × √2 for moteus's amplitude. The seller's list says 16 A RMS; the maker's own drawing wins |
+| JMC I_peak | 28.1 A | the boards' `servo.max_current_A` since 2026-11-19 = 18 N·m at the AD60 output (its maximum permissible torque, the limit Zach kept) at 0.64 N·m/A |
+| GIM I_cont | 2.06 A | SteadyWin's rated torque 1.05 N·m ÷ the rig's kt 0.5087 N·m/A |
+| GIM I_peak | 7.5 A | SteadyWin's peak torque 3.82 N·m ÷ 0.5087 N·m/A |
+| board cut | 60 °C | the boards' own config: moteus derates from `fault_temperature` 80 − `temperature_margin` 20 = 60 °C, reaching 0 A near 72 °C on the JMC boards (`derate_current_A` −20) |
+| re-arm | 55 °C | not a cap: hysteresis, so the verdict does not chatter at 60 °C |
+| refill rate | min(C/55 s, I_cont² − I²) | Zach's minute, and the physics of I²R: a winding at its rating sheds about I_cont²·R |
+
+## What robot_thermal recommends on top: Zach's call, not applied
+
+These live in `src/robot_thermal/drives/proposed_margins.py`. The evidence comes from v2's pessimistic thermal model
+(`tests/test_v1_v2.py`): after a long hold at I_cont in a 30 °C room, a full burst should keep the winding under its
+limit. The datasheet rules fail that check, and the failure is a strict xfail in the suite. Neither maker publishes
+thermal resistance or time constants, so the model's winding parameters are physics priors. This is evidence, not a
+measurement; E1 on the rack's hardstop stations is what would settle it.
+
+| drive | proposed | evidence | cost |
+|---|---|---|---|
+| GIM4305-10 | I_cont 1.5 A, I_peak 4.2 A | Held at 2.06 A in a 30 °C room, the winding settles at 78 °C (prior) / 103 °C (hot bound), against SteadyWin's only stated temperature, 80 °C. At 1.5 A it settles at 54 / 65 °C, and 4.2 A is the largest burst that then lasts 5 s. 7.5 A held is thermal runaway on the prior | continuous −27 % (0.76 vs 1.05 N·m), burst −44 % (2.14 vs 3.82 N·m); moot while the wrist boards are capped at 2.0 A |
+| JMC 60ASM400 + AD60 | I_cont 17 A | Held at 20.5 A in a 30 °C room, the winding settles at 130 °C (prior) / 204 °C (hot bound), against IEC 60034-1's 145 °C class-F average-winding limit. At 17 A it settles at 92 / 130 °C, and a 28.1 A burst then has 9.8 s | continuous 12.1 vs 14.6 N·m at the output; J2's gravity hold is ~10 A, so no effect at tonight's loads |
+
+The winding limits themselves:
+- **JMC 145 °C** is IEC 60034-1's class-F limit for the average winding temperature (105 K over a 40 °C ambient).
+  Class F comes from JMC's drawing of the sibling 60ASM400-5-17BCH-DB15, because this model's drawing states no class.
+- **GIM 80 °C** is weak. SteadyWin states no insulation class; its −20 to 80 °C is an ambient working range (the rig's
+  wrist datasheet check, 2026-11-20).
+- These limits feed v2's estimates and the proposal, never the shipped v1 rule.
 
 **On the shoulders the board binds before the winding at 28.1 A.** Tonight's board fits (C1, J2) extrapolate to
-2.3-2.9 K/s at 28.1 A, so from J2's ~40 °C hold the 55 °C cut ends a burst after about 6 s, close to the bucket's 5 s.
-That is an extrapolation from 8-10 A; the first real burst will show it.
+2.3-2.9 K/s at 28.1 A. From J2's ~40 °C hold the board would then reach 55 °C in about 6 s and moteus's 60 °C in about
+8 s. That is extrapolated from 8-10 A, so it is a prediction for the first real burst to check.
 
 ## In code
 
@@ -46,22 +71,28 @@ limit_nm = v.current_limit_a * kt          # clamp |torque command| to this
 `robot_thermal.burst` is standard-library only (`tests/test_boundary.py`), so it can be imported or vendored into
 the rig's loop as is. Replay a logged run: `python tools/replay_v1.py <run_dir>`.
 
+## History
+
+- **7ea2406:** the first version, with my own ×0.75 margin on I_cont (15 A shoulders, 1.5 A wrists) and a 55 °C board
+  cut.
+- **013a5e8:** tightened by v2's check (shoulders 14 A, wrist peak 4.5 A).
+- **This version:** back to cited datasheet numbers under Zach's no-artificial-guards rule, after the rig owner asked
+  where the winding limits came from. The margins moved to `proposed_margins.py` as a recommendation.
+
 ## Why this shape
 
-- **It is the industrial servo drive's I²t foldback**, not a new idea: heat stored above the continuous rating fills
+- **It is the industrial servo drive's I²t foldback**, not a new idea. Heat stored above the continuous rating fills
   the bucket, rests below it empty it, and a full bucket folds the limit back to continuous.
-- **It degrades gracefully:** a burst at I lasts (C − heat)/(I² − I_cont²), so a weaker burst lasts longer and
+- **It degrades gracefully.** A burst at I lasts (C − heat)/(I² − I_cont²), so a weaker burst lasts longer, and
   anything at or below I_cont never spends budget.
-- **The refill is the slower of Zach's minute and the copper's cooling,** so over any run the I²·t delivered is at
+- **The refill is the slower of Zach's minute and the copper's cooling.** So over any run the I²·t delivered is at
   most I_cont²·T plus the heat still in the bucket (`tests/test_burst.py`, a greedy controller for 30 min).
-- **On the shoulders 28.1 A is only 2× continuous,** so a 5 s burst cannot cook a JMC winding (v2's prior gives it
-  68 s from a 14 A hold); there the rule bounds RMS over minutes, and the board is the nearer limit. The wrists are
-  where bursts above continuous are a real thermal question.
-- **v1 is checked against v2:** a full burst from the worst state v1 allows before it (a long hold at I_cont, 30 °C
-  room) keeps v2's pessimistic winding under its limit (`tests/test_v1_v2.py`).
+- **An industrial servo's own overload curve allows more.** Delta's ECM-B3 400 W (60 mm class) fits
+  t·(L² − 1) ≈ 23 s from cold: 300 % for 2.8 s, 200 % for 8 s (see the prior-art note). This bucket holds
+  C / I_cont² = 4.4 s in the same units.
 
 ## What would change it
 
-- A thermistor on one motor or a resistance check (see the project's experiment plan) turns I_cont and the margin
-  from a datasheet guess into a measurement; v2's observer then replaces the bucket.
-- `servo.max_power_W` (72 W on J1 and J2) binds before 28.1 A at speed; that is the rig's setting, not this rule.
+- E1 (a resistance-checked heating run on the rack's hardstop stations) or E2 (a thermistor on one motor) turns the
+  winding from a datasheet prior into a measurement; v2's observer can then replace the bucket.
+- `servo.max_power_W` (72 W on J1 and J2) binds before 28.1 A at speed. That is the rig's setting, not this rule.

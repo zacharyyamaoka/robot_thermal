@@ -83,7 +83,8 @@ def fig_burst():
     ax[0].plot(ts, want, color=C_MEAS, lw=1.0, label="asked for")
     ax[0].plot(ts, got, color=C_EST, lw=1.4, label="allowed (clamped to the verdict)")
     ax[0].axhline(rule.continuous_current_a, color=MUTED, ls="--", lw=0.8)
-    ax[0].text(301, rule.continuous_current_a, " I_cont 15 A", va="center", color=MUTED, fontsize=8)
+    ax[0].text(301, rule.continuous_current_a, f" I_cont {rule.continuous_current_a:.1f} A", va="center", color=MUTED,
+               fontsize=8)
     ax[0].set_ylabel("q current (A)")
     ax[0].legend(loc="upper right", ncol=2, fontsize=8)
     ax[1].plot(ts, left, color=C_HOT, lw=1.3)
@@ -191,15 +192,18 @@ def fig_ttl():
     fig, axes = plt.subplots(1, 2, figsize=(8.6, 3.2))
     for ax, (p, rule, cur, title) in zip(axes, [(JMC_T, JMC_RULE, [16, 18, 20, 22, 24, 26, 28.1, 32, 36, 40],
                                                  "JMC shoulder (board cap 28.1 A)"),
-                                                (GIM_T, GIM_RULE, [2.0, 2.5, 3, 4, 5, 6, 7.5],
+                                                (GIM_T, GIM_RULE, [2.1, 2.5, 3, 4, 5, 6, 7.5],
                                                  "GIM wrist (cap 2.0 A today)")]):
         for params, col, lab in ((p, C_EST, "model, prior"), (p.hot(1.0), C_HOT, "hot bound")):
-            ys = []
+            ys, which = [], []
             for i in cur:
                 x0 = [25.0, 25.0, 25.0, 25.0]
-                ttl, _ = th.time_to_limit_s(params, x0, i, horizon_s=3600.0)
+                ttl, w = th.time_to_limit_s(params, x0, i, horizon_s=3600.0)
                 ys.append(min(ttl, 3600.0))
-            ax.plot(cur, ys, "o-", color=col, ms=3, lw=1.2, label=lab)
+                which.append(w)
+            ax.plot(cur, ys, "-", color=col, lw=1.2, label=lab)
+            for xv, yv, w in zip(cur, ys, which):
+                ax.plot([xv], [yv], "^" if w == "board" else "o", color=col, ms=4.5)
         ax.plot(cur, [min(bu.burst_seconds_at(rule, bu.BurstState(), i), 3600.0) for i in cur], "s--", ms=3,
                 color=MUTED, lw=1.0, label="v1 rule: burst from a full budget")
         ax.set_yscale("log")
@@ -289,7 +293,25 @@ def main() -> None:
     def ratio(name, res):
         return f"{res.rel_sd(name) / H.PRIOR.log_sd(name):.2f}"
 
+    from dataclasses import replace as _replace
+    x25 = [25.0] * 4
+    no_board = _replace(JMC_T, board_limit_c=1e9)
+    tests = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(ROOT / "tests")],
+                           capture_output=True, text=True, cwd=ROOT).stdout.strip().splitlines()[-1]
+    n_pass = int(tests.split(" passed")[0].split()[-1])
+    n_xfail = int(tests.split(" xfailed")[0].split()[-1]) if "xfailed" in tests else 0
+
     page = TEMPLATE.format(
+        n_pass=n_pass, n_xfail=n_xfail,
+        jmc_ic=JMC_RULE.continuous_current_a, jmc_ip=JMC_RULE.peak_current_a, jmc_refill=JMC_RULE.refill_at_rest_s,
+        gim_ic=GIM_RULE.continuous_current_a, gim_ip=GIM_RULE.peak_current_a, gim_refill=GIM_RULE.refill_at_rest_s,
+        gim_at_cap=bu.burst_seconds_at(GIM_RULE, bu.BurstState(), 2.0),
+        jmc_ttl_board=th.time_to_limit_s(JMC_T, x25, 28.1)[0],
+        jmc_ttl_wind=th.time_to_limit_s(no_board, x25, 28.1)[0],
+        jmc_ttl_wind_hot=th.time_to_limit_s(_replace(JMC_T.hot(1.0), board_limit_c=1e9), x25, 28.1)[0],
+        gim_ttl_45=th.time_to_limit_s(GIM_T, x25, 4.2)[0],
+        gim_ttl_45_hot=th.time_to_limit_s(GIM_T.hot(1.0), x25, 4.2)[0],
+        jmc_wlim=JMC_T.winding_limit_c, gim_wlim=GIM_T.winding_limit_c,
         wb_ratio=f"{min(wb):.2f}-{max(wb):.2f}", board_ratio=f"{min(bd):.2f}-{max(bd):.2f}",
         board_err=f"{100 * bd_err:.0f} %",
         blind_cw=ratio("winding_heat_capacity_j_per_k", blind), blind_gwh=ratio("winding_to_housing_w_per_k", blind),

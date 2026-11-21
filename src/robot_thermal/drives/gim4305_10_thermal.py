@@ -19,8 +19,11 @@ thermal = ThermalParams(
     board_loss_w_per_a2=0.02,
     board_idle_w=0.3,
     phase_resistance_ohm=0.630497,  # CAN 14's motor.resistance_ohm, 2026-11-14 backup
-    winding_limit_c=85.0,  # the maker's working range ends at 80 °C; a small gimbal motor's magnets are the worry
-    board_limit_c=60.0,
+    # SOURCE, weak: SteadyWin states no insulation class or winding limit; its only temperature is a working range of
+    # −20 to 80 °C, an ambient figure (wrist datasheet check, zach_brain reports/media/audits/
+    # 2026-11-20-wrist-datasheet-check.md). Used as the limit until a class is known; flagged to Zach.
+    winding_limit_c=80.0,
+    board_limit_c=60.0,  # SOURCE: moteus derates from fault_temperature 80 − temperature_margin 20
     prior_log_sd=(
         ("winding_heat_capacity_j_per_k", 0.5),
         ("housing_heat_capacity_j_per_k", 0.5),

@@ -47,7 +47,7 @@ def test_full_strength_burst_lasts_burst_s():
 def test_weaker_burst_lasts_longer_and_continuous_is_free():
     fresh = BurstState()
     assert burst_seconds_at(JMC, fresh, JMC.peak_current_a) == pytest.approx(JMC.burst_s)
-    currents = [16.0, 20.0, 24.0, 28.1]
+    currents = [21.0, 23.0, 26.0, 28.1]
     seconds = [burst_seconds_at(JMC, fresh, i) for i in currents]
     assert all(a > b for a, b in zip(seconds, seconds[1:]))
     assert burst_seconds_at(JMC, fresh, JMC.continuous_current_a) == math.inf
@@ -61,12 +61,12 @@ STEEP = BurstRule(name="steep", continuous_current_a=1.5, peak_current_a=7.5)
 
 
 def test_refill_follows_the_rule_below_3_46x_and_the_physics_above():
-    # JMC 28.1/14 = 2.0x and GIM 4.5/1.5 = 3x continuous: Zach's 60 s period binds, 55 s to refill at rest
+    # JMC 28.1/20.5 = 1.4x continuous: Zach's 60 s period binds, 55 s to refill at rest
     assert JMC.refill_at_rest_s == pytest.approx(55.0)
-    assert GIM.refill_at_rest_s == pytest.approx(55.0)
-    # 5x continuous: the copper's I_cont² cooling binds
-    assert STEEP.peak_to_continuous > math.sqrt(STEEP.period_s / STEEP.burst_s)
-    assert STEEP.refill_at_rest_s == pytest.approx(STEEP.capacity_a2s / STEEP.continuous_current_a**2)
+    # GIM 7.5/2.06 = 3.6x and STEEP 5x continuous: the copper's I_cont² cooling binds
+    for rule in (GIM, STEEP):
+        assert rule.peak_to_continuous > math.sqrt(rule.period_s / rule.burst_s)
+        assert rule.refill_at_rest_s == pytest.approx(rule.capacity_a2s / rule.continuous_current_a**2)
     for rule in (JMC, GIM, STEEP):
         state = update(rule, BurstState(), 0.0, 0.0)
         state, t = run(rule, state, 0.0, rule.burst_s, rule.peak_current_a)
@@ -116,16 +116,16 @@ def test_a_greedy_controller_that_obeys_the_limit_stays_at_or_below_continuous_r
 
 
 def test_hot_board_stops_bursts_with_hysteresis():
-    state = update(JMC, BurstState(), 0.0, 0.0, 54.9)
+    state = update(JMC, BurstState(), 0.0, 0.0, 59.9)
     assert verdict(JMC, state).may_burst
-    state = update(JMC, state, 0.1, 0.0, 55.0)
+    state = update(JMC, state, 0.1, 0.0, 60.0)
     v = verdict(JMC, state)
     assert (v.may_burst, v.reason, v.current_limit_a) == (False, "board_hot", JMC.continuous_current_a)
-    state = update(JMC, state, 0.2, 0.0, 52.0)  # cooling, still above the release point
+    state = update(JMC, state, 0.2, 0.0, 57.0)  # cooling, still above the release point
     assert not verdict(JMC, state).may_burst
     state = update(JMC, state, 0.3, 0.0, None)  # no reading this tick: keep the latch
     assert not verdict(JMC, state).may_burst
-    state = update(JMC, state, 0.4, 0.0, 49.9)
+    state = update(JMC, state, 0.4, 0.0, 54.9)
     assert verdict(JMC, state).may_burst
 
 
@@ -145,9 +145,9 @@ def test_the_hold_current_slows_the_refill_only_where_physics_says_so():
     assert holding > at_rest
     assert holding == pytest.approx(STEEP.capacity_a2s / (STEEP.continuous_current_a**2 - 0.55**2), rel=1e-3)
     # below 3.46x the minute binds, and a light hold does not slow it
-    state = update(GIM, BurstState(), 0.0, 0.0)
-    state, _ = run(GIM, state, 0.0, GIM.burst_s, GIM.peak_current_a)
-    assert verdict(GIM, state, rest_current_a=0.55).next_full_burst_in_s == pytest.approx(55.0, rel=1e-3)
+    state = update(JMC, BurstState(), 0.0, 0.0)
+    state, _ = run(JMC, state, 0.0, JMC.burst_s, JMC.peak_current_a)
+    assert verdict(JMC, state, rest_current_a=5.0).next_full_burst_in_s == pytest.approx(55.0, rel=1e-3)
 
 
 def test_time_going_backwards_passes_no_time():
@@ -176,5 +176,5 @@ def test_update_all_tracks_every_arm_drive():
     states = update_all(arm.RULES, states, 0.0, {"J2": 10.0, "W1": 0.5}, {"J2": 42.0})
     states = update_all(arm.RULES, states, 1.0, {"J2": 28.1, "W1": 0.5}, {"J2": 42.0})
     assert set(states) == set(arm.RULES)
-    assert states["J2"].heat_a2s == pytest.approx(28.1**2 - 14.0**2)
+    assert states["J2"].heat_a2s == pytest.approx(28.1**2 - 20.5**2)
     assert states["J1"] == BurstState()

@@ -56,14 +56,14 @@ a {{ color:var(--accent); }}
 (v2), and the first fit from the arm's real logs. Nothing here touched a rig.</p>
 
 <div class="verdict"><b>The v1 burst rule is in the arm's hands, and v2 tracks a hidden winding to within
-{bo_rms:.1f} °C RMS from the board alone, once one E1 rack run has fitted it.</b> The rule is an I²t bucket plus a 55 °C
-board cut, and the rig's owner adopted it tonight. The v2 result is proven in simulation only. On the real arm tonight's
+{bo_rms:.1f} °C RMS from the board alone, once one E1 rack run has fitted it.</b> The rule is an I²t bucket plus a 60 °C
+board cut, every number cited to a datasheet, the boards' config or Zach's words, and the rig's owner adopted it tonight. The v2 result is proven in simulation only. On the real arm tonight's
 logs pin only the board node: J2's board time constant is about {j2_tau:.0f} s ± {j2_tau_sd:.0f} %. No winding
 temperature is measured anywhere yet, so until E1 runs, every winding number on the real arm is a datasheet prior plus a
 stated margin.</div>
 
 <div class="kpis">
- <div class="kpi"><b>35 + 1</b><span>tests pass; 1 stated ruler fails and is kept (strict xfail)</span></div>
+ <div class="kpi"><b>{n_pass} + {n_xfail}</b><span>tests pass; {n_xfail} recorded findings kept as strict xfails</span></div>
  <div class="kpi"><b>{wr_rms:.1f} °C</b><span>held-out winding RMS with a resistance check / 60 s (max {wr_max:.1f})</span></div>
  <div class="kpi"><b>{bo_rms:.1f} °C</b><span>held-out winding RMS, board only, after E1's fit (max {bo_max:.1f})</span></div>
  <div class="kpi"><b>{po_bound:.0f} %</b><span>of samples the protection bound sits above the true winding, unfitted</span></div>
@@ -73,26 +73,40 @@ stated margin.</div>
 <h2>1 · Tonight's rule (v1): an I²t bucket and a board cut</h2>
 <div class="rule">
 <p><b>Per drive, every tick:</b> heat += (I² − I_cont²)·dt above continuous; below it, heat −= min(C / 55 s, I_cont² − I²)·dt,
-never below 0; C = (I_peak² − I_cont²)·5 s. Under C and with the board below 55 °C (released at 50 °C), the drive may go to
-I_peak; otherwise it clamps to I_cont until the bucket empties.</p>
+never below 0; C = (I_peak² − I_cont²)·5 s. While the bucket is under C and the board is below 60 °C (re-armed at 55 °C),
+the drive may go to I_peak; otherwise it clamps to I_cont until the bucket empties. <b>Every number is cited: a datasheet,
+the boards' own config, or Zach's words</b> (his standing no-artificial-guards rule).</p>
 <ul>
-<li><b>Shoulders J1/J2/C1</b> (JMC 60ASM400 + AD60): I_cont 15 A (JMC's 14.5 A RMS = 20.5 A amplitude, ×0.75), I_peak 28.1 A
-(the 18 N·m gearbox cap). 5 s at the cap, refilled in 55 s at rest; 5 s every minute forever.</li>
-<li><b>Wrists and claw</b> (GIM4305-10): I_cont 1.5 A, I_peak 7.5 A (the maker's 3.82 N·m). 5 s at the peak, refilled in
-120 s: here copper cooling, not the minute, sets the refill.</li>
+<li><b>Shoulders J1/J2/C1</b> (JMC 60ASM400 + AD60): I_cont {jmc_ic:.1f} A (JMC's drawing: 14.5 A RMS = 20.5 A amplitude),
+I_peak {jmc_ip:.1f} A (the boards' cap = the AD60's 18 N·m). 5 s at the cap, refilled in {jmc_refill:.0f} s at rest.</li>
+<li><b>Wrists and claw</b> (GIM4305-10): I_cont {gim_ic:.2f} A (rated 1.05 N·m), I_peak {gim_ip:.1f} A (peak 3.82 N·m). 5 s at
+the peak, refilled in {gim_refill:.0f} s, because at 3.6× continuous the copper's cooling sets the refill. Today's 2.0 A
+board cap sits below I_cont.</li>
+<li><b>Board cut at 60 °C:</b> where moteus starts its own derate (fault 80 − margin 20).</li>
 <li>The refill is the slower of Zach's minute and the copper's I_cont² cooling. So over any run the I²·t delivered is at
 most I_cont²·T plus the heat still in the bucket (a greedy controller, 30 min, <code>tests/test_burst.py</code>).</li>
 </ul>
 </div>
+<div class="box warn"><b>Recommended margins, waiting on Zach (not applied).</b> The datasheet rules fail v2's own
+pessimistic check: a long hold at I_cont in a 30 °C room, then a full burst.
+<ul>
+<li><b>GIM:</b> the 2.06 A hold alone settles the winding at 78 °C (prior) / 103 °C (hot bound), against SteadyWin's
+only stated temperature, 80 °C. The proposal is I_cont 1.5 A and I_peak 4.2 A, which costs 27 % continuous and 44 % burst
+torque. It is moot while the wrist boards cap at 2.0 A.</li>
+<li><b>JMC:</b> a hold at 20.5 A reaches 130 / 204 °C against IEC 60034-1's 145 °C class-F limit. The proposal is I_cont
+17 A, which costs 17 % continuous torque and has no effect at tonight's loads.</li>
+</ul>
+The winding parameters behind this are physics priors, so it is evidence, not a measurement; E1 settles it
+(<code>drives/proposed_margins.py</code>, <code>tests/test_v1_v2.py</code>).</div>
 <figure><img src="{burst_png}" alt="burst budget folding back a greedy controller">
 <figcaption>A controller that asks for 8 s at 28.1 A once a minute, holding 10 A in between, gets 5 s, then folds back to
-15 A. The 52 s at 10 A before the next ask refill about 95 % of the budget (a full refill takes 55 s), so each later burst
-gets just under 5 s.</figcaption></figure>
+I_cont. The 52 s at 10 A before the next ask refill about 95 % of the budget (a full refill takes 55 s), so each later
+burst gets just under 5 s.</figcaption></figure>
 <h3>Tonight's 1.0 run through the rule (job 1120-175952-740f)</h3>
 <table><tr><th>drive</th><th>peak A</th><th>RMS A</th><th>I_cont / I_peak</th><th>budget low-water</th><th>board max °C</th></tr>
 {rep_rows}</table>
-<p>No bucket is touched. On the shoulders 28.1 A is only 1.9× continuous, so a 5 s burst cannot cook a JMC winding; there
-the rule bounds RMS over minutes. The wrists are where bursts above continuous are a real thermal question. The rig owner
+<p>No bucket is touched. On the shoulders 28.1 A is only 1.4× the rated current, so a 5 s burst cannot cook a JMC winding;
+there the rule bounds RMS over minutes, and the board is the nearer limit (section 5). The wrists are where bursts above continuous are a real thermal question. The rig owner
 now gates each fast arm submit on this rule, using the twin's predicted current, and replays every real run through
 <code>tools/replay_v1.py</code>.</p>
 
@@ -169,11 +183,19 @@ T_eq and rise per A² trade against each other), only its time constant and wher
 enough to fit. The winding is not in this data at all.</p>
 
 <h2>5 · What it predicts: seconds until a limit</h2>
-<figure><img src="{ttl_png}" alt="time to limit vs current"><figcaption>Seconds from 25 °C until the winding (110 °C JMC, 85 °C
-GIM) or the board (60 °C) reaches its limit at a held current. Blue is the prior model, red the hot bound, grey the v1 bucket's
-allowance. Even on the hot bound a JMC can hold 28.1 A for well over a minute, so v1 is conservative there. On the GIM, 7.5 A
-held is thermal runaway: copper's resistance rise outruns the cooling and there is no steady state (asserted in
-<code>tests/test_thermal.py</code>).</figcaption></figure>
+<figure><img src="{ttl_png}" alt="time to limit vs current"><figcaption>Seconds from 25 °C until the winding ({jmc_wlim:.0f} °C JMC,
+IEC class F; {gim_wlim:.0f} °C GIM, SteadyWin's stated working range) or the board (60 °C) reaches its limit at a held current. A circle means the winding binds, a triangle the board.
+Blue is the prior model, red the hot bound, grey the v1 bucket's allowance.</figcaption></figure>
+<ul>
+<li><b>JMC at 28.1 A: the board binds first.</b> On the prior it reaches 60 °C in {jmc_ttl_board:.0f} s; the winding alone would take
+{jmc_ttl_wind:.0f} s, or {jmc_ttl_wind_hot:.0f} s on the hot bound. Tonight's real board fits agree in kind: C1's and J2's boards
+extrapolate to 2.3-2.9 K/s at 28.1 A, about 6 s from a 40 °C hold to the 55 °C cut. That is an extrapolation from 8-10 A
+runs, a prediction for the first real burst to check.</li>
+<li><b>GIM: the winding binds.</b> At 4.2 A (the proposed peak) from 25 °C it takes {gim_ttl_45:.0f} s on the prior and
+{gim_ttl_45_hot:.0f} s on the hot bound.
+At its 7.5 A peak, held continuously, it is thermal runaway: copper's resistance rise outruns the cooling and there is no
+steady state (<code>tests/test_thermal.py</code>).</li>
+</ul>
 
 <h2>6 · Compute time per update</h2>
 <table><tr><th>black box</th><th>median</th><th>p95</th><th>budget</th></tr>
@@ -188,8 +210,9 @@ held is thermal runaway: copper's resistance rise outruns the cooling and there 
 <li>v1 rule committed with its acceptance test, sent to the rig's owner and adopted. It gates fast arm submits and is
 replayed on every real run.</li>
 <li>v2 model, observer and fit pass the hidden-ground-truth test: parameters within ±25 % (core) and ±50 % (weak), held-out
-winding within the stated bounds, and the bound holds even unfitted. 35 tests pass plus the recorded xfail; the runtime
-core imports with no site-packages.</li>
+winding within the stated bounds, and the bound holds even unfitted. {n_pass} tests pass, plus {n_xfail} findings kept as strict
+xfails (one board-identifiability ruler, and the datasheet rules failing v2's hot bound); the runtime core imports with no
+site-packages.</li>
 <li>Board-node fit from tonight's logs, with spreads and a held-out check that beats "no change" on J1, J2 and C1.</li>
 </ul>
 <h3>Only modelled, not measured</h3>
@@ -200,6 +223,33 @@ built to sit above it, but that is proven in simulation, not on a motor.</li></u
 (no torque) and a resistance check every 60 s. Per Zach, it never runs on the pendulum or the arm. The spec is
 <code>docs/EXPERIMENTS.md</code>; it waits for a bus gap from the W2 goal's pendulum work.</li>
 <li><b>E2</b>, a 10 kΩ NTC on J2's end turns, which moteus reads natively. That is a hardware change and Zach's call.</li></ul>
+<h3>Decided for you (each undoable)</h3>
+<ul>
+<li><b>The code lives in <code>/home/bam/robot_thermal</code>,</b> a sibling of robot_controllers. It is local git only,
+with nothing pushed.</li>
+<li><b>The runtime core has zero dependencies;</b> robot_msgs is the <code>msgs</code> extra rather than a dependency,
+because the rig's loop must import the core with nothing installed. Undo: move <code>robot-msgs</code> into
+<code>dependencies</code>.</li>
+<li><b>The hot bound sits at 1 prior sd per parameter</b> (≈ 2 sd jointly), and the conductance priors are tighter
+(0.35) than the capacities (0.5), because the rated current pins the total resistance. Undo:
+<code>ObserverConfig.hot_k_sd</code> and the drive records.</li>
+<li><b>Simulated E1 heats at 16 A,</b> so its board stays inside E1's own 60 °C abort.</li>
+<li><b>The report lives in <code>reports/media/</code>,</b> because it carries over 256 KB of figures; it rebuilds from
+<code>docs/build_report.py</code>.</li>
+</ul>
+<h3>Needs Zach</h3>
+<ul>
+<li><b>The recommended margins above</b> (GIM 1.5 / 4.2 A, JMC 17 A continuous). My recommendation is to wait for E1
+rather than apply them: the wrist boards cap at 2.0 A anyway, and the shoulders' tonight loads sit far below 17 A.</li>
+<li><b>The GIM's winding limit.</b> SteadyWin publishes none; 80 °C is its ambient working range. A class (B 130 °C /
+F 155 °C) from SteadyWin, or E1's measurement, would replace it.</li>
+</ul>
+<h3>Deliberately not done</h3>
+<ul>
+<li>I ran nothing on a rig, and nothing here touches one.</li>
+<li>I did not wire the observer into the arm's loop: it is proven only in simulation, and lane J owns the loop.</li>
+<li>I did not fit a winding from the arm's logs: they hold none.</li>
+</ul>
 </main>
 </body>
 </html>

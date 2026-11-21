@@ -44,7 +44,7 @@ class ThermalParams:
     phase_resistance_ohm: float  # R₀ at resistance_ref_c (moteus motor.resistance_ohm)
     resistance_ref_c: float = 25.0  # T₀
     copper_alpha_per_k: float = 0.00393  # α of annealed copper
-    winding_limit_c: float = 110.0  # °C the winding must stay under
+    winding_limit_c: float = 145.0  # °C, average winding: IEC 60034-1 class F (105 K over 40 °C); records cite theirs
     board_limit_c: float = 60.0  # °C: where moteus starts its own derate (fault_temperature − temperature_margin)
     # how far each POSITIVE name may be off, as a log-normal sd (0.3 ≈ ±30 %): the fit's prior and the hot bound
     prior_log_sd: tuple[tuple[str, float], ...] = ()

@@ -26,8 +26,11 @@ thermal = ThermalParams(
     board_loss_w_per_a2=0.015,
     board_idle_w=0.5,
     phase_resistance_ohm=0.080294,  # CAN 12's motor.resistance_ohm, 2026-11-19 backup
-    winding_limit_c=110.0,  # class F (155 °C) less margin for the magnets, the encoder and our uncertainty
-    board_limit_c=60.0,
+    # SOURCE: IEC 60034-1's class F limit for the AVERAGE winding temperature (what resistance measures and this lumped
+    # node is): 105 K rise over a 40 °C ambient = 145 °C. Class F itself comes from JMC's drawing of the sibling
+    # 60ASM400-5-17BCH-DB15; this model's own drawing states no class.
+    winding_limit_c=145.0,
+    board_limit_c=60.0,  # SOURCE: moteus derates from fault_temperature 80 − temperature_margin 20
     prior_log_sd=(
         ("winding_heat_capacity_j_per_k", 0.5),
         ("housing_heat_capacity_j_per_k", 0.5),
