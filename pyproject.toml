@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "robot-thermal"
+version = "0.1.0"
+description = "Thermally limited servoing: burst budgets, lumped thermal models and observers that track winding and board temperature."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Zach Yamaoka" }]
+requires-python = ">=3.11"
+# WHY no runtime dependency: the burst budget and the thermal observer run inside a rig's control loop, so they are
+# standard-library only (tests/test_boundary.py proves it). robot_msgs is the `msgs` extra: only the ServoState
+# adapter needs it. numpy/scipy/matplotlib are test oracles and report tooling, never runtime imports.
+dependencies = []
+
+[project.optional-dependencies]
+msgs = ["robot-msgs>=0.3.0"]
+test = ["pytest>=8", "numpy>=1.26", "scipy>=1.11", "robot-msgs>=0.3.0"]
+report = ["numpy>=1.26", "matplotlib>=3.8", "imageio-ffmpeg>=0.5"]
+
+[tool.uv.sources]
+robot-msgs = { path = "../robot_msgs", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/robot_thermal"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
