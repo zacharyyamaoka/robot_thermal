@@ -30,4 +30,5 @@ def test_core_imports_with_no_site_packages_and_pulls_no_numpy():
 
 
 # modules added to the core later (the thermal model and observer) append themselves here
-EXTRA_CORE: list[str] = []
+EXTRA_CORE: list[str] = ["robot_thermal.thermal", "robot_thermal.observer", "robot_thermal.fit", "robot_thermal.sim",
+                          "robot_thermal.drives.jmc_60asm400_ad60_thermal", "robot_thermal.drives.gim4305_10_thermal"]
