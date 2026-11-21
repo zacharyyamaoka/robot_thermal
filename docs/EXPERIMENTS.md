@@ -8,6 +8,20 @@ hands over the log.
 
 ## E1 — winding heating and cooling with resistance checks, 1-DOF rack (about 40 min, no hardware change)
 
+> [!important] Where E1 may run (Zach, 2026-11-20, relayed by the Trajectory Tracking Agent)
+> *"The thermal session should just work in Sim, and it can actually work on the motors on the 1 DOF rack, there
+> are motors that have the hardstops its can work with ... but it 100% should not be working on the pendulum or
+> bam fb that should be on our w2 goals"*
+> - **Yes:** the One Dof Test Rack's hardstop stations on fdcanusb 272813EF: **CAN 13**, a JMC (60ASM200 inferred)
+>   + AD60 10:1 on a balanced stop plate (the arm shoulder's twin), and **CAN 1**, a GIM4305-10 with a pin
+>   hardstop (the wrist's twin). Motor, `servo.max_current_A` and `motor.resistance_ohm` come from the rig's
+>   `records/one-dof-test-rack/deployment.json` and the boards' own config, not the robotparts BOM.
+> - **Never:** CAN 11 (the pendulum), or any BAM FB board (the arm's fdcanusb 0607623A: J1, J2, C1, wrist, claw).
+> - The bus is shared with the pendulum: E1 runs in a gap the W2 goal's pendulum work leaves, booked through the
+>   rack's bus lock and gated tools; the gap is the W2 Goal Agent's to give. The rig's owner runs it; this project
+>   never opens a device.
+> - Sim first: `tests/test_hidden_truth.py` runs E1 on a hidden plant and shows what the fit recovers from it.
+
 **What it measures:** the winding temperature itself, through copper's resistance, R(T) = R₀·(1 + 0.00393·(T − T₀)),
 so 1 % of resistance is 2.5 °C. Together with the logged current and board temperature it identifies the winding →
 housing → ambient network (both time constants, both thermal resistances) and the board's own heating, which is
@@ -40,7 +54,12 @@ current; GIM4305, R ≈ 0.63 Ω: V ≈ 0.3, 0.6, 0.9 V at 2 A).
 
 **Currents:** I_heat = the motor's continuous current (JMC 60ASM400: 20 A amplitude; a 60ASM200: its rated RMS
 current × √2; GIM4305-10: 2.0 A, today's cap), I_burst = the board's `servo.max_current_A`. Do not raise any
-board limit for this.
+board limit for this. With the link resting on its hardstop the d-axis heating still applies no torque; a q-axis
+press into the stop at the same current is an equivalent alternative if d-axis current mode is unavailable.
+
+**Optional step 3b, for the board's own parameters (+12 min):** 3 × (2 min at I_heat, 2 min at zero). The
+simulation shows plain E1 narrows the board's heat capacity and board-to-ambient conductance only to ~0.67 of
+their prior; a square wave near the board's ~2 min time constant separates it from the housing's ~13 min.
 
 **Abort (stop current, log why):** board ≥ 60 °C (where moteus starts its own derate), winding by resistance
 ≥ 90 °C (R ≥ 1.25 × R₀ from 25 °C), any fault, any motion over 2° at the output during a d-axis step.
