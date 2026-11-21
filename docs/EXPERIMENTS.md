@@ -54,7 +54,10 @@ current; GIM4305, R ≈ 0.63 Ω: V ≈ 0.3, 0.6, 0.9 V at 2 A).
 
 **Currents:** I_heat = the motor's continuous current (JMC 60ASM400: 20 A amplitude; a 60ASM200: its rated RMS
 current × √2; GIM4305-10: 2.0 A, today's cap), I_burst = the board's `servo.max_current_A`. Do not raise any
-board limit for this. With the link resting on its hardstop the d-axis heating still applies no torque; a q-axis
+board limit for this. **The board heats with I² too:** in simulation a 60ASM400-class plant at 20 A takes its board to
+77 °C, past the abort, while 16 A holds it at 57 °C. So start the heat step at 0.8 × the continuous current, and lower
+it if the board passes 55 °C in the first 5 min. Log whatever current was used: the fit only needs it logged, not
+any particular value. With the link resting on its hardstop the d-axis heating still applies no torque; a q-axis
 press into the stop at the same current is an equivalent alternative if d-axis current mode is unavailable.
 
 **Optional step 3b, for the board's own parameters (+12 min):** 3 × (2 min at I_heat, 2 min at zero). The

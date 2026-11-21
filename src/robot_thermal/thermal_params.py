@@ -75,7 +75,7 @@ class ThermalParams:
     def board_time_constant_s(self) -> float:
         return self.board_heat_capacity_j_per_k / (self.board_to_ambient_w_per_k + self.board_to_housing_w_per_k)
 
-    def hot(self, k_sd: float = 2.0) -> ThermalParams:
+    def hot(self, k_sd: float = 1.0) -> ThermalParams:
         """The pessimistic network: every heat capacity and conductance k_sd prior sds low, the board loss high.
 
         WHY one-sided: it is the bound a protection decision reads (time to limit, the winding's upper estimate);

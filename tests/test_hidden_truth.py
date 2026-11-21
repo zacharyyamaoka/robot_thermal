@@ -41,6 +41,7 @@ TRUTH = replace(
     board_idle_w=PRIOR.board_idle_w * 0.8,
 )
 AMBIENT = 22.3
+E1_HEAT_A = 16.0
 CORE = ("winding_heat_capacity_j_per_k", "housing_heat_capacity_j_per_k", "board_heat_capacity_j_per_k",
         "winding_to_housing_w_per_k", "housing_to_ambient_w_per_k", "board_to_ambient_w_per_k",
         "board_loss_w_per_a2")
@@ -68,12 +69,14 @@ def _plant(params, current_fn, duration_s, dt=0.1):
     return times, currents, th.simulate(params, x0, times, currents)
 
 
-@pytest.fixture(scope="module")
-def e1():
-    current_fn, duration, checks = sim.e1_current(heat_a=20.0, burst_a=28.1)
+def make_e1(seed=11):
+    """The E1 rack protocol on the hidden plant, as the fit sees it: 1 Hz, whole-degree board, a winding reading at
+    each resistance check."""
+    # WHY 16 A, not the motor's 20 A continuous: at 20 A this plant's board passes 60 °C, where E1 aborts (a first
+    # draft heated at 20 A and its board reached 77 °C); 16 A keeps the board at 57 °C, as the real run must
+    current_fn, duration, checks = sim.e1_current(heat_a=E1_HEAT_A, burst_a=28.1)
     times, currents, xs = _plant(TRUTH, current_fn, duration)
-    rng = random.Random(11)
-    # the fit's view: 1 Hz, the board in whole degrees, a winding reading at each resistance check
+    rng = random.Random(seed)
     step = 10
     ft = times[::step]
     # the RMS current over each 1 s interval ending at the fit sample (the model holds the later sample's current)
@@ -82,12 +85,26 @@ def e1():
     fi = fi[: len(ft)]
     fb = [sim.board_reading(x[th.B], rng) for x in xs[::step]]
     windings = [(t, xs[round(t / 0.1)][th.W] + rng.gauss(0.0, 2.5)) for t in checks]
-    return dict(times=ft, currents=fi, board=fb, winding=windings, truth=xs)
+    return dict(times=ft, currents=fi, board=fb, winding=windings, truth=xs[::step],
+                board_max=max(x[th.B] for x in xs), winding_max=max(x[th.W] for x in xs))
+
+
+def make_fit(e1_data):
+    return fit(PRIOR, e1_data["times"], e1_data["currents"], e1_data["board"], winding=e1_data["winding"], free=FREE)
+
+
+@pytest.fixture(scope="module")
+def e1():
+    return make_e1()
 
 
 @pytest.fixture(scope="module")
 def fitted(e1):
-    return fit(PRIOR, e1["times"], e1["currents"], e1["board"], winding=e1["winding"], free=FREE)
+    return make_fit(e1)
+
+
+def test_simulated_e1_stays_inside_its_own_abort_limits(e1):
+    assert e1["board_max"] < 60.0 and e1["winding_max"] < 90.0, (e1["board_max"], e1["winding_max"])
 
 
 def test_fit_recovers_the_hidden_parameters(fitted):
@@ -101,9 +118,9 @@ def test_fit_recovers_the_hidden_parameters(fitted):
 
 @pytest.mark.xfail(strict=True, reason=(
     "FINDING 2026-11-20, the ruler unchanged: E1 narrows the board's own heat capacity and board-to-ambient "
-    "conductance only to ~0.67 of their prior sd (0.30 -> 0.20; the prior is already mjbots' bare-board measurement), "
-    "while every winding-branch parameter is identified (0.15-0.28 of prior). Both board values still land within 5 % "
-    "of the truth. Fix belongs to the experiment, not this bound: a board-only excitation in E1."))
+    "conductance only to ~0.7 of their prior sd (the prior is already mjbots' bare-board measurement), while every "
+    "winding-branch parameter is identified (0.2-0.4 of prior). Both board values still land within a few % of the "
+    "truth. The fix belongs to the experiment, not this bound: E1's optional step 3b."))
 def test_e1_identifies_every_core_parameter(fitted):
     assert all(fitted.identified()[n] for n in CORE), fitted.spread
 
@@ -118,10 +135,10 @@ def test_the_resistance_checks_are_what_identify_the_winding(e1, fitted):
     """Same E1 log without the resistance checks. The winding's heat capacity stays unidentified, and both winding
     parameters are pinned at least twice as loosely as with the checks.
 
-    History: a first draft asserted that the board alone identifies neither C_w nor G_wh. The run showed G_wh at 0.47
-    of its prior from the board alone (7 % off the truth): with the board on the housing (0.15 W/K here), the board
-    reading carries some of the winding branch. That is Zach's point that one sensor plus a model says more than the
-    sensor alone; the claim kept here is the one the data support.
+    History: a first draft asserted that the board alone identifies neither C_w nor G_wh. With E1 heating at 20 A
+    the board-only fit pinned G_wh at 0.47 of its prior through the board's coupling to the housing, so that draft
+    failed. At 20 A, though, the simulated board passed E1's own 60 °C abort. At the 16 A a real run can use, the
+    board-only ratios are ~0.9. The claim kept here holds in both cases.
     """
     blind = fit(PRIOR, e1["times"], e1["currents"], e1["board"], winding=(), free=FREE)
     assert not blind.identified()["winding_heat_capacity_j_per_k"], blind.spread
@@ -129,12 +146,13 @@ def test_the_resistance_checks_are_what_identify_the_winding(e1, fitted):
         assert blind.rel_sd(name) >= 2.0 * fitted.rel_sd(name), (name, blind.rel_sd(name), fitted.rel_sd(name))
 
 
-def _run_observer(params, current_fn, duration_s, with_resistance, seed=5):
+def run_observer(params, current_fn, duration_s, with_resistance, seed=5, trace=False):
     times, currents, xs = _plant(TRUTH, current_fn, duration_s)
     rng = random.Random(seed)
     hot = params.hot(ob.DEFAULT.hot_k_sd)
     s = ob.start(params, 0.0, sim.board_reading(xs[0][th.B], rng), 0.0)
     errs, inside, bound_ok, upd, est = [], 0, 0, [], []
+    tr = dict(t=[], true_w=[], est_w=[], sd_w=[], hi_w=[], true_b=[], board=[], current=[], ttl=[])
     for k in range(1, len(times)):
         board = sim.board_reading(xs[k][th.B], rng)
         wind = None
@@ -151,23 +169,32 @@ def _run_observer(params, current_fn, duration_s, with_resistance, seed=5):
             errs.append(err)
             inside += abs(err) <= 2 * e.winding_sd_c
             bound_ok += e.winding_hi_c >= xs[k][th.W]
+            if trace:
+                for key, v in (("t", times[k]), ("true_w", xs[k][th.W]), ("est_w", e.winding_c),
+                               ("sd_w", e.winding_sd_c), ("hi_w", e.winding_hi_c), ("true_b", xs[k][th.B]),
+                               ("board", board), ("current", currents[k]), ("ttl", e.time_to_limit_s)):
+                    tr[key].append(v)
     n = len(errs)
-    return dict(rms=math.sqrt(sum(e * e for e in errs) / n), max=max(abs(e) for e in errs), coverage=inside / n,
-                bound=bound_ok / n, update_s=statistics.median(upd), estimate_s=statistics.median(est))
+    out = dict(rms=math.sqrt(sum(e * e for e in errs) / n), max=max(abs(e) for e in errs), coverage=inside / n,
+               bound=bound_ok / n, update_s=statistics.median(upd), estimate_s=statistics.median(est),
+               update_p95_s=sorted(upd)[int(0.95 * len(upd))], estimate_p95_s=sorted(est)[int(0.95 * len(est))])
+    if trace:
+        out["trace"] = tr
+    return out
 
 
 ARM = sim.arm_duty(hold_a=10.0, burst_a=28.1, move_a=18.0)
 
 
 def test_observer_tracks_the_hidden_winding_with_resistance_checks(fitted):
-    r = _run_observer(fitted.params, ARM, 1200.0, with_resistance=True)
+    r = run_observer(fitted.params, ARM, 1200.0, with_resistance=True)
     assert r["rms"] <= HELD_OUT_WITH_R["rms"] and r["max"] <= HELD_OUT_WITH_R["max"], r
     assert r["coverage"] >= HELD_OUT_WITH_R["coverage"], r
     assert r["bound"] >= BOUND_HOLDS, r
 
 
 def test_observer_tracks_the_hidden_winding_from_the_board_alone_after_the_fit(fitted):
-    r = _run_observer(fitted.params, ARM, 1200.0, with_resistance=False)
+    r = run_observer(fitted.params, ARM, 1200.0, with_resistance=False)
     assert r["rms"] <= HELD_OUT_BOARD_ONLY["rms"] and r["max"] <= HELD_OUT_BOARD_ONLY["max"], r
     assert r["bound"] >= BOUND_HOLDS, r
     assert r["update_s"] <= UPDATE_BUDGET_S and r["estimate_s"] <= ESTIMATE_BUDGET_S, r
@@ -176,5 +203,5 @@ def test_observer_tracks_the_hidden_winding_from_the_board_alone_after_the_fit(f
 def test_the_hot_bound_holds_even_on_the_unfitted_prior():
     """Tonight's situation: no E1 yet, datasheet priors, board readings only. The estimate may be off, but the bound a
     protection reads must still sit above the true winding."""
-    r = _run_observer(PRIOR, ARM, 1200.0, with_resistance=False)
+    r = run_observer(PRIOR, ARM, 1200.0, with_resistance=False)
     assert r["bound"] >= BOUND_HOLDS, r

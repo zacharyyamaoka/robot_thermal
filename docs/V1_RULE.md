@@ -9,16 +9,25 @@ amplitude): when |I| > I_cont add (I² − I_cont²)·dt; when |I| ≤ I_cont su
 never below 0; C = (I_peak² − I_cont²) · 5 s. While the bucket is below C and the board is cool the drive may command
 up to I_peak; once the bucket reaches C, or the drive's measured board temperature reaches 55 °C (released below
 50 °C), clamp that drive to I_cont (torque I_cont·kt) until the bucket is empty again.** Shoulders J1/J2/C1 (JMC
-60ASM400 + AD60 10:1): I_cont 15 A (JMC's drawing rates 14.5 A RMS = 20.5 A amplitude, taken ×0.75), I_peak 28.1 A
-(the 18 N·m gearbox cap, the boards' `servo.max_current_A`), C 2,823 A²·s: 5 s at 28.1 A, refilled in 55 s at rest,
+60ASM400 + AD60 10:1): I_cont 14 A (JMC's drawing rates 14.5 A RMS = 20.5 A amplitude, taken ×0.68), I_peak 28.1 A
+(the 18 N·m gearbox cap, the boards' `servo.max_current_A`), C 2,968 A²·s: 5 s at 28.1 A, refilled in 55 s at rest,
 and a full-strength 5 s burst every 60 s can run forever. Wrists and claw (GIM4305-10): I_cont 1.5 A (rated
-1.05 N·m / 0.5087 N·m/A = 2.06 A, ×0.75), I_peak 7.5 A (the maker's 3.82 N·m peak), C 270 A²·s: 5 s at 7.5 A, refilled
-in 120 s at rest (here the copper's cooling, not the minute, sets the refill); at today's 2.0 A board cap a wrist may
-sit at 2.0 A for 154 s before it folds back to 1.5 A. The boards derate themselves from 60 °C (`fault_temperature`
-80 − `temperature_margin` 20), so the 55 °C cut ends bursts before the board throttles them. Tonight's 1.0 run (job
-`1120-175952-740f`) never touches a bucket: J2 peaks at 11.6 A, every drive keeps 100 % of its budget. No winding
-temperature is measured (`servo.enable_motor_temperature` 0), so these are datasheet numbers with a 25 % margin, not
-a measurement.
+1.05 N·m / 0.5087 N·m/A = 2.06 A, ×0.75), I_peak 4.5 A (2.29 N·m), C 90 A²·s: 5 s at 4.5 A, refilled in 55 s; at
+today's 2.0 A board cap a wrist may sit at 2.0 A for 51 s before it folds back to 1.5 A. The boards derate themselves
+from 60 °C (`fault_temperature` 80 − `temperature_margin` 20, reaching 0 A near 72 °C on the JMC boards), so the
+55 °C cut ends bursts before the board throttles them. Tonight's 1.0 run (job `1120-175952-740f`) never touches a
+bucket: J2 peaks at 11.6 A, every drive keeps 100 % of its budget. No winding temperature is measured
+(`servo.enable_motor_temperature` 0), so these are datasheet numbers with a margin, checked against v2's pessimistic
+thermal model, not a measurement.
+
+**Changed the same night (the commit after cbda40e that adds `tests/test_v1_v2.py`):** the first version said I_cont 15 A on the shoulders
+and I_peak 7.5 A (the maker's peak torque) on the wrists. v2's hot bound showed a full burst from a long hold at
+I_cont in a 30 °C room would take a GIM winding to its 85 °C limit in 1.8 s at 7.5 A, and a JMC to 110 °C in 4.5 s
+from a 15 A hold; at 4.5 A and 14 A they get 5.8 s and 12 s (`tests/test_v1_v2.py`).
+
+**On the shoulders the board binds before the winding at 28.1 A.** Tonight's board fits (C1, J2) extrapolate to
+2.3-2.9 K/s at 28.1 A, so from J2's ~40 °C hold the 55 °C cut ends a burst after about 6 s, close to the bucket's 5 s.
+That is an extrapolation from 8-10 A; the first real burst will show it.
 
 ## In code
 
@@ -45,8 +54,11 @@ the rig's loop as is. Replay a logged run: `python tools/replay_v1.py <run_dir>`
   anything at or below I_cont never spends budget.
 - **The refill is the slower of Zach's minute and the copper's cooling,** so over any run the I²·t delivered is at
   most I_cont²·T plus the heat still in the bucket (`tests/test_burst.py`, a greedy controller for 30 min).
-- **On the shoulders 28.1 A is only 1.9× continuous,** so a 5 s burst cannot cook a JMC winding; there the rule bounds
-  the RMS over minutes. The wrists are where bursts above continuous are a real thermal question.
+- **On the shoulders 28.1 A is only 2× continuous,** so a 5 s burst cannot cook a JMC winding (v2's prior gives it
+  68 s from a 14 A hold); there the rule bounds RMS over minutes, and the board is the nearer limit. The wrists are
+  where bursts above continuous are a real thermal question.
+- **v1 is checked against v2:** a full burst from the worst state v1 allows before it (a long hold at I_cont, 30 °C
+  room) keeps v2's pessimistic winding under its limit (`tests/test_v1_v2.py`).
 
 ## What would change it
 

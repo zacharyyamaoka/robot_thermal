@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thermally Limited Servoing</title>
+<style>
+:root {{ --bg:#fafaf9; --card:#ffffff; --ink:#1f2328; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb;
+  --ok:#15803d; --okbg:#ecfdf5; --warn:#b45309; --warnbg:#fffbeb; --bad:#b91c1c; --badbg:#fef2f2; --code:#f3f4f6; }}
+@media (prefers-color-scheme: dark) {{ :root:not([data-theme="light"]) {{ --bg:#111316; --card:#1a1d21; --ink:#e7e9ec;
+  --muted:#9aa1ab; --line:#2c3138; --accent:#7aa2ff; --ok:#4ade80; --okbg:#0f2a1a; --warn:#fbbf24; --warnbg:#2a210c;
+  --bad:#f87171; --badbg:#2b1313; --code:#23272d; }} }}
+:root[data-theme="dark"] {{ --bg:#111316; --card:#1a1d21; --ink:#e7e9ec; --muted:#9aa1ab; --line:#2c3138; --accent:#7aa2ff;
+  --ok:#4ade80; --okbg:#0f2a1a; --warn:#fbbf24; --warnbg:#2a210c; --bad:#f87171; --badbg:#2b1313; --code:#23272d; }}
+* {{ box-sizing:border-box; }}
+body {{ margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,
+  Roboto,sans-serif; }}
+main {{ max-width:960px; margin:0 auto; padding:28px 16px 64px; }}
+h1 {{ font-size:26px; margin:0 0 6px; letter-spacing:-.01em; }}
+h2 {{ font-size:19px; margin:38px 0 10px; padding-top:6px; border-top:1px solid var(--line); }}
+h3 {{ font-size:15px; margin:18px 0 6px; }}
+p, li {{ max-width:78ch; }}
+.sub {{ color:var(--muted); margin:0 0 18px; }}
+.verdict {{ background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent); padding:14px 16px;
+  border-radius:8px; }}
+.kpis {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin:16px 0; }}
+.kpi {{ background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }}
+.kpi b {{ display:block; font-size:20px; }}
+.kpi span {{ color:var(--muted); font-size:12.5px; }}
+figure {{ margin:14px 0; background:#fff; border:1px solid var(--line); border-radius:8px; padding:8px; }}
+figure img {{ width:100%; height:auto; display:block; }}
+figcaption {{ color:#4b5563; font-size:12.5px; padding:6px 4px 2px; }}
+table {{ border-collapse:collapse; width:100%; font-size:13px; margin:10px 0; display:block; overflow-x:auto; }}
+th, td {{ text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }}
+th {{ color:var(--muted); font-weight:600; }}
+td.ok {{ color:var(--ok); }} td.warn {{ color:var(--warn); }} td.bad {{ color:var(--bad); }}
+code {{ background:var(--code); padding:1px 5px; border-radius:4px; font-size:12.5px; }}
+.box {{ border-radius:8px; padding:10px 14px; margin:12px 0; border:1px solid var(--line); background:var(--card); }}
+.box.ok {{ background:var(--okbg); }} .box.warn {{ background:var(--warnbg); }} .box.bad {{ background:var(--badbg); }}
+.rule {{ background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 16px; }}
+svg text {{ font-family:inherit; }}
+.net {{ background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px; }}
+.net svg {{ width:100%; height:auto; }}
+.net .n {{ fill:var(--card); stroke:var(--ink); stroke-width:1.4; }}
+.net .t {{ fill:var(--ink); font-size:13px; }}
+.net .m {{ fill:var(--muted); font-size:11px; }}
+.net .w {{ stroke:var(--muted); stroke-width:1.4; fill:none; }}
+.net .h {{ stroke:#dc2626; stroke-width:1.6; fill:none; }}
+a {{ color:var(--accent); }}
+</style>
+</head>
+<body>
+<main>
+<h1>Thermally limited servoing</h1>
+<p class="sub">robot_thermal @ <code>{sha}</code> · 2026-11-20 · burst budget (v1), lumped thermal model + Kalman observer
+(v2), and the first fit from the arm's real logs. Nothing here touched a rig.</p>
+
+<div class="verdict"><b>The v1 burst rule is in the arm's hands, and v2 tracks a hidden winding to within
+{bo_rms:.1f} °C RMS from the board alone, once one E1 rack run has fitted it.</b> The rule is an I²t bucket plus a 55 °C
+board cut, and the rig's owner adopted it tonight. The v2 result is proven in simulation only. On the real arm tonight's
+logs pin only the board node: J2's board time constant is about {j2_tau:.0f} s ± {j2_tau_sd:.0f} %. No winding
+temperature is measured anywhere yet, so until E1 runs, every winding number on the real arm is a datasheet prior plus a
+stated margin.</div>
+
+<div class="kpis">
+ <div class="kpi"><b>35 + 1</b><span>tests pass; 1 stated ruler fails and is kept (strict xfail)</span></div>
+ <div class="kpi"><b>{wr_rms:.1f} °C</b><span>held-out winding RMS with a resistance check / 60 s (max {wr_max:.1f})</span></div>
+ <div class="kpi"><b>{bo_rms:.1f} °C</b><span>held-out winding RMS, board only, after E1's fit (max {bo_max:.1f})</span></div>
+ <div class="kpi"><b>{po_bound:.0f} %</b><span>of samples the protection bound sits above the true winding, unfitted</span></div>
+ <div class="kpi"><b>{t_obs}</b><span>observer update, median (p95 {t_obs95}); the burst rule {t_burst}</span></div>
+</div>
+
+<h2>1 · Tonight's rule (v1): an I²t bucket and a board cut</h2>
+<div class="rule">
+<p><b>Per drive, every tick:</b> heat += (I² − I_cont²)·dt above continuous; below it, heat −= min(C / 55 s, I_cont² − I²)·dt,
+never below 0; C = (I_peak² − I_cont²)·5 s. Under C and with the board below 55 °C (released at 50 °C), the drive may go to
+I_peak; otherwise it clamps to I_cont until the bucket empties.</p>
+<ul>
+<li><b>Shoulders J1/J2/C1</b> (JMC 60ASM400 + AD60): I_cont 15 A (JMC's 14.5 A RMS = 20.5 A amplitude, ×0.75), I_peak 28.1 A
+(the 18 N·m gearbox cap). 5 s at the cap, refilled in 55 s at rest; 5 s every minute forever.</li>
+<li><b>Wrists and claw</b> (GIM4305-10): I_cont 1.5 A, I_peak 7.5 A (the maker's 3.82 N·m). 5 s at the peak, refilled in
+120 s: here copper cooling, not the minute, sets the refill.</li>
+<li>The refill is the slower of Zach's minute and the copper's I_cont² cooling. So over any run the I²·t delivered is at
+most I_cont²·T plus the heat still in the bucket (a greedy controller, 30 min, <code>tests/test_burst.py</code>).</li>
+</ul>
+</div>
+<figure><img src="{burst_png}" alt="burst budget folding back a greedy controller">
+<figcaption>A controller that asks for 8 s at 28.1 A once a minute, holding 10 A in between, gets 5 s, then folds back to
+15 A. The 52 s at 10 A before the next ask refill about 95 % of the budget (a full refill takes 55 s), so each later burst
+gets just under 5 s.</figcaption></figure>
+<h3>Tonight's 1.0 run through the rule (job 1120-175952-740f)</h3>
+<table><tr><th>drive</th><th>peak A</th><th>RMS A</th><th>I_cont / I_peak</th><th>budget low-water</th><th>board max °C</th></tr>
+{rep_rows}</table>
+<p>No bucket is touched. On the shoulders 28.1 A is only 1.9× continuous, so a 5 s burst cannot cook a JMC winding; there
+the rule bounds RMS over minutes. The wrists are where bursts above continuous are a real thermal question. The rig owner
+now gates each fast arm submit on this rule, using the twin's predicted current, and replays every real run through
+<code>tools/replay_v1.py</code>.</p>
+
+<h2>2 · The model (v2)</h2>
+<div class="net">
+<svg viewBox="0 0 900 250" role="img" aria-label="thermal network">
+ <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+  <path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/></marker></defs>
+ <rect class="n" x="40" y="80" width="150" height="62" rx="10"/><text class="t" x="115" y="106" text-anchor="middle">winding T_w</text>
+ <text class="m" x="115" y="126" text-anchor="middle">C_w · copper</text>
+ <rect class="n" x="330" y="80" width="170" height="62" rx="10"/><text class="t" x="415" y="106" text-anchor="middle">housing T_h</text>
+ <text class="m" x="415" y="126" text-anchor="middle">C_h · stator, case, gearbox</text>
+ <rect class="n" x="650" y="80" width="190" height="62" rx="10"/><text class="t" x="745" y="106" text-anchor="middle">ambient T_a</text>
+ <text class="m" x="745" y="126" text-anchor="middle">a slow random walk</text>
+ <rect class="n" x="330" y="180" width="170" height="56" rx="10"/><text class="t" x="415" y="204" text-anchor="middle">board T_b · measured</text>
+ <text class="m" x="415" y="222" text-anchor="middle">C_b · moteus FETs</text>
+ <path class="w" d="M190 111 H330"/><text class="m" x="260" y="102" text-anchor="middle">G_wh</text>
+ <path class="w" d="M500 111 H650"/><text class="m" x="575" y="102" text-anchor="middle">G_ha</text>
+ <path class="w" d="M415 142 V180"/><text class="m" x="440" y="165">G_bh (0 if apart)</text>
+ <path class="w" d="M500 208 H745 V142"/><text class="m" x="620" y="200" text-anchor="middle">G_ba</text>
+ <path class="h" d="M115 30 V78" marker-end="url(#ar)"/><text class="m" x="125" y="40">P_cu = 1.5·R₀(1+α(T_w−T₀))·I²</text>
+ <path class="h" d="M260 208 H328" marker-end="url(#ar)"/><text class="m" x="150" y="212">P_b = k_b·I² + P_idle</text>
+</svg></div>
+<ul>
+<li><b>Linear in the state given the current</b> (copper's α·T_w·I² term sits in A), so the observer is an exact linear
+Kalman filter over [T_w, T_h, T_b, T_a]. It fuses the board reading every moteus gives, plus a resistance-derived
+winding temperature or a housing thermistor where they exist.</li>
+<li><b>Two models.</b> With only the board measured, the winding is not observable, so a lone filter would overclaim. A
+pessimistic "hot" network (capacities and conductances 2 prior sds low) carries the winding between direct measurements.
+The protection outputs, <code>winding_hi_c</code> and <code>time_to_limit_s</code>, read it.</li>
+<li><b>Fit</b>: MAP least squares in log-parameters with the prior as a penalty, so an unexcited parameter stays at its prior
+and says so. It is Levenberg-Marquardt in pure Python, checked against scipy/numpy oracles.</li>
+<li>Board priors are mjbots' own measurement of bare boards (r4: 10.0 K/W, 12.7 J/K; c1: 11.3 K/W, 10.7 J/K). JMC and SteadyWin
+publish no thermal data, so the winding and housing priors are physics estimates with log sd 0.5 (×/÷1.65).</li>
+</ul>
+
+<h2>3 · Proof in simulation: a hidden plant</h2>
+<p>The hidden plant is the JMC network with every parameter moved 20-60 % off the prior, the board coupled to the housing 3×
+more than the prior says, and ambient at 22.3 °C. Its data come through the sensors the rig has: whole-degree board
+readings, and during E1 only, a resistance check every 60 s at ±2.5 °C. The bounds were written before the first run.</p>
+<figure><img src="{e1_png}" alt="E1 on the hidden plant"><figcaption>The fit's residuals: board {board_rms:.2f} °C RMS
+(the whole-degree step alone is 0.29), winding {wind_rms:.1f} °C against ±2.5 °C checks.</figcaption></figure>
+<table><tr><th>parameter</th><th>hidden truth</th><th>prior</th><th>fit</th><th>fit vs truth</th><th>log sd: prior → posterior</th>
+<th>posterior, board only</th></tr>{param_rows}</table>
+<div class="box warn"><b>One stated ruler fails, kept as a strict xfail.</b> E1 narrows the board's own heat capacity and
+board-to-ambient conductance only to {board_ratio} of their prior sd. That prior is already a measurement (mjbots' bare
+board), and both values land within {board_err} of truth. Every winding-branch parameter is identified, at {wb_ratio} of its
+prior. The fix is optional E1 step 3b, a 2 min square wave, not a looser bound.</div>
+<div class="box ok"><b>What the board alone can and cannot say.</b> Without the resistance checks the same E1 log pins the
+winding's heat capacity to {blind_cw} of its prior and its conductance to {blind_gwh}, so it identifies neither. With the
+checks they are {fit_cw} and {fit_gwh}. A first draft that heated at 20 A, where the board itself passed its 60 °C abort,
+showed the board pinning G_wh to 0.47 through its coupling to the housing. At the 16 A a real run can use, that
+information is gone. The test asserts the checks pin both at least twice as tightly.</div>
+<figure><img src="{heldout_png}" alt="held-out winding estimates"><figcaption>Held-out arm duty, 20 min, never seen by the fit.
+Top: with resistance checks, RMS {wr_rms:.1f} °C, 2 sd covers truth {wr_cov:.0f} % of the time. Middle: board only after the
+fit, the deployable case once E1 has run. Bottom: tonight's situation, datasheet priors and board only. The estimate is off
+by {po_rms:.1f} °C RMS, and the bound a protection reads sits above the truth {po_bound:.0f} % of the time. It is also
+about twice the true rise, so a protection on it would stop drives early: that is what not measuring the winding costs, and
+what E1 removes.</figcaption></figure>
+
+<h2>4 · Tonight's real logs: the board node only</h2>
+<p>The arm logged 18 JTC runs tonight, 4-42 s each at about 60 Hz, with whole-degree board temperatures and no current
+between runs (arm-hold keeps only a latest-state snapshot). Each board is fitted as
+dT_b/dt = a·I² − (T_b − T_eq)/τ_b across all runs, each run starting from its own first reading. The runs from 02:11 UTC on
+are held out, and the "no change" baseline can beat the model.</p>
+<figure><img src="{real_png}" alt="real board fits"><figcaption>Grey is the board reading; blue is the fit and red the held-out
+prediction. J2 holds the arm against gravity, so it always carries 8-10 A: its zero-current point is not identifiable (its
+T_eq and rise per A² trade against each other), only its time constant and where it settles at its working current.
+</figcaption></figure>
+<table><tr><th>drive</th><th>range °C</th><th>τ_b</th><th>rise per A²</th><th>T_eq (0 A)</th><th>held-out RMS vs "no change"</th>
+<th>verdict</th></tr>{real_rows}</table>
+<p><b>What this is and is not.</b> These are board-node numbers with their spreads, from short runs. J2 ({j2_tau:.0f} s) and C1
+({c1_tau:.0f} s ± {c1_tau_sd:.0f} %) differ by 4×, which says J2's board feels a slow housing under it. The wrist board did not move
+enough to fit. The winding is not in this data at all.</p>
+
+<h2>5 · What it predicts: seconds until a limit</h2>
+<figure><img src="{ttl_png}" alt="time to limit vs current"><figcaption>Seconds from 25 °C until the winding (110 °C JMC, 85 °C
+GIM) or the board (60 °C) reaches its limit at a held current. Blue is the prior model, red the hot bound, grey the v1 bucket's
+allowance. Even on the hot bound a JMC can hold 28.1 A for well over a minute, so v1 is conservative there. On the GIM, 7.5 A
+held is thermal runaway: copper's resistance rise outruns the cooling and there is no steady state (asserted in
+<code>tests/test_thermal.py</code>).</figcaption></figure>
+
+<h2>6 · Compute time per update</h2>
+<table><tr><th>black box</th><th>median</th><th>p95</th><th>budget</th></tr>
+<tr><td>v1 burst update + verdict</td><td>{t_burst}</td><td>{t_burst95}</td><td>60 Hz loop: 16.7 ms</td></tr>
+<tr><td>v2 observer update (Kalman predict + board correction)</td><td>{t_obs}</td><td>{t_obs95}</td><td>1 ms (test)</td></tr>
+<tr><td>v2 estimate incl. time-to-limit (1 h horizon)</td><td>{t_est}</td><td>{t_est95}</td><td>20 ms (test); call at a few Hz</td></tr></table>
+<p>Pure Python, one core, measured on this machine while the arm's controller shared it.</p>
+
+<h2>7 · Where it stands</h2>
+<h3>Done and proved</h3>
+<ul>
+<li>v1 rule committed with its acceptance test, sent to the rig's owner and adopted. It gates fast arm submits and is
+replayed on every real run.</li>
+<li>v2 model, observer and fit pass the hidden-ground-truth test: parameters within ±25 % (core) and ±50 % (weak), held-out
+winding within the stated bounds, and the bound holds even unfitted. 35 tests pass plus the recorded xfail; the runtime
+core imports with no site-packages.</li>
+<li>Board-node fit from tonight's logs, with spreads and a held-out check that beats "no change" on J1, J2 and C1.</li>
+</ul>
+<h3>Only modelled, not measured</h3>
+<ul><li>Every winding temperature on the real arm. Until E1 runs, the winding is a datasheet prior. The protection bound is
+built to sit above it, but that is proven in simulation, not on a motor.</li></ul>
+<h3>What turns the winding guess into a measurement</h3>
+<ul><li><b>E1</b>, about 40 min on the rack's hardstop stations: CAN 13 (JMC + AD60) and CAN 1 (GIM). It uses d-axis heating
+(no torque) and a resistance check every 60 s. Per Zach, it never runs on the pendulum or the arm. The spec is
+<code>docs/EXPERIMENTS.md</code>; it waits for a bus gap from the W2 goal's pendulum work.</li>
+<li><b>E2</b>, a 10 kΩ NTC on J2's end turns, which moteus reads natively. That is a hardware change and Zach's call.</li></ul>
+</main>
+</body>
+</html>

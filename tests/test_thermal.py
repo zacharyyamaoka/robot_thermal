@@ -74,7 +74,7 @@ def test_time_to_limit_matches_a_fine_euler_march(p, current, start):
 
 
 def test_hot_bound_is_pessimistic():
-    hot = JMC.hot(2.0)
+    hot = JMC.hot(1.0)
     assert hot.winding_heat_capacity_j_per_k < JMC.winding_heat_capacity_j_per_k
     assert th.steady_state(hot, 15.0, 22.0)[th.W] > th.steady_state(JMC, 15.0, 22.0)[th.W]
     t_nom, _ = th.time_to_limit_s(JMC, [25.0] * 4, 28.1)

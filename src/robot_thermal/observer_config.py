@@ -20,4 +20,7 @@ class ObserverConfig:
     loss_rel_sd: float = 0.1
     loss_correlation_s: float = 30.0
     initial_sd_c: tuple[float, float, float, float] = (8.0, 5.0, 1.0, 3.0)  # winding, housing, board, ambient
-    hot_k_sd: float = 2.0  # the hot bound's parameters sit this many prior sds on the pessimistic side
+    # the hot bound's parameters each sit this many prior sds on the pessimistic side. WHY 1, not 2: moving n
+    # parameters 1 sd each the same way moves their joint effect by √n sd, about 2 sd for the 4-5 that set a
+    # winding's rise; a first draft at 2 put the JMC's winding at 224 °C at its continuous current
+    hot_k_sd: float = 1.0

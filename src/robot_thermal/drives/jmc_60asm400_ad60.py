@@ -6,13 +6,15 @@ from robot_thermal.burst_rule import BurstRule
 
 rule = BurstRule(
     name="jmc-60asm400+ad60-10",
-    # WHY 15 A: JMC's own drawing rates the motor at 14.5 A RMS phase current (its seller's list says 16 A). moteus
-    # reports the phase-current amplitude, so that is 14.5·√2 = 20.5 A. Derated ×0.75 because the rating is for a
+    # WHY 14 A: JMC's own drawing rates the motor at 14.5 A RMS phase current (its seller's list says 16 A). moteus
+    # reports the phase-current amplitude, so that is 14.5·√2 = 20.5 A; 14 A is ×0.68 of it. The rating is for a
     # motor bolted to a test heat-sink plate, ours sits in an arm on a gearbox, and the two JMC sources disagree.
-    # J2's gravity hold (about 10 A, all day, boards steady near 40 °C) sits well inside it.
-    continuous_current_a=15.0,
+    # 14, not the first draft's 15: v2's hot bound (tests/test_v1_v2.py) needs a full 5 s burst from a long hold
+    # at I_cont in a 30 °C room to keep the winding under 110 °C; at 15 A it reached it in 4.5 s, at 14 A in 12 s.
+    # J2's gravity hold (about 10 A, all day, boards near 40 °C) sits well inside it.
+    continuous_current_a=14.0,
     # WHY 28.1 A: the boards' servo.max_current_A since 2026-11-19, which is 18 N·m (the gearbox limit Zach kept) at
-    # torque_caps.py's 0.64 N·m/A. It is only 1.9x continuous, so on these drives the bucket mostly bounds RMS.
+    # torque_caps.py's 0.64 N·m/A. It is only 2x continuous, so on these drives the bucket mostly bounds RMS.
     peak_current_a=28.1,
     burst_s=5.0,
     period_s=60.0,
@@ -20,5 +22,5 @@ rule = BurstRule(
     # 60 °C; stopping bursts 5 °C earlier keeps a burst from ending inside the board's own derate.
     board_burst_off_c=55.0,
     board_burst_on_c=50.0,
-    source="JMC drawing 14.5 A RMS rated x0.75 margin; board max_current_A 28.1; moteus derate from 60 C",
+    source="JMC drawing 14.5 A RMS rated x0.68 margin; board max_current_A 28.1; moteus derate from 60 C",
 )

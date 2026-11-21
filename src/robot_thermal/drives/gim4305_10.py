@@ -10,12 +10,13 @@ rule = BurstRule(
     # ×0.75 like the JMC (no maker thermal data; a 140 g motor). Today's board cap, 2.0 A, is already about the
     # rated current, so the wrists only enter the burst regime if that cap is raised.
     continuous_current_a=1.5,
-    # WHY 7.5 A: the maker's peak torque, 3.82 N·m, over 0.5087 N·m/A. It is 5x continuous, beyond the 3.46x at
-    # which "5 s every 60 s" stays thermally sustainable, so the physics term sets this refill: about 2 min at rest.
-    peak_current_a=7.5,
+    # WHY 4.5 A (2.29 N·m), not the maker's 7.5 A peak (3.82 N·m): v2's hot bound (tests/test_v1_v2.py) needs a full
+    # 5 s burst from a long hold at I_cont in a 30 °C room to keep this 140 g motor's winding under 85 °C. At 7.5 A
+    # it got 1.8 s, at 4.5 A 5.8 s. 3x continuous, so Zach's minute sets the refill.
+    peak_current_a=4.5,
     burst_s=5.0,
     period_s=60.0,
     board_burst_off_c=55.0,
     board_burst_on_c=50.0,
-    source="SteadyWin rated 1.05 N.m / kt 0.5087 x0.75 margin; peak 3.82 N.m; moteus derate from 60 C",
+    source="SteadyWin rated 1.05 N.m / kt 0.5087 x0.75 margin; peak 4.5 A by v2 hot bound; moteus derate from 60 C",
 )

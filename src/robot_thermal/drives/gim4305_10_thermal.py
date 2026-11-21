@@ -25,8 +25,10 @@ thermal = ThermalParams(
         ("winding_heat_capacity_j_per_k", 0.5),
         ("housing_heat_capacity_j_per_k", 0.5),
         ("board_heat_capacity_j_per_k", 0.3),
-        ("winding_to_housing_w_per_k", 0.5),
-        ("housing_to_ambient_w_per_k", 0.5),
+        # WHY 0.35, tighter than the capacities: the maker's rated current pins the total winding-to-ambient
+        # resistance (at rated current the winding sits near its class limit); nothing pins the time constants
+        ("winding_to_housing_w_per_k", 0.35),
+        ("housing_to_ambient_w_per_k", 0.35),
         ("board_to_ambient_w_per_k", 0.3),
         ("board_to_housing_w_per_k", 1.0),
         ("board_loss_w_per_a2", 0.7),
