@@ -46,7 +46,7 @@ measured limit, or his words. Nothing in the shipped rule is an agent-picked mar
 | wrist I_cont | 1.0 N·m ÷ kt | SteadyWin GIM4305-10, GDS34 column: nominal torque. The fitted variant is unproven; GDS34 is the column both variants satisfy (wrist datasheet check, `zach_brain/reports/media/audits/2026-11-20-wrist-datasheet-check.md`) |
 | wrist I_peak | 3.47 N·m ÷ kt | the same column's stall torque. SteadyWin gives no duration |
 | wrist kt | 0.5252 / 0.5062 / 0.5167 (W1-W3), 0.5161 (claw) | 10 × 8.270 / the arm boards' own Kv (157.474 / 163.385 / 160.055; claw 160.251). The rig code's 0.5087 is the one-dof rack's CAN 14, a different motor |
-| board cut | 60 °C | the boards' own config: moteus derates from `fault_temperature` 80 − `temperature_margin` 20 = 60 °C |
+| board cut | 60 °C | the boards' own config: moteus derates from `fault_temperature` 80 − `temperature_margin` 20 = 60 °C. Shoulders: `rack_2026-11-19/config_backups/can12-20261119T130929Z-before.cfg`. Wrists: `rack_2026-11-13/config_backups/can14-20261114T010744Z-before.cfg`, the dump HEADROOM_1120.md attributes to the arm's wrists. A c1 left at firmware defaults (75 − 25) would start its own derate at 50 °C, before this cut, which only makes it the board's protection rather than this rule's |
 | re-arm | 55 °C | not a cap: hysteresis, so the verdict does not chatter at 60 °C |
 | refill rate | min(C/55 s, I_cont² − I²) | Zach's minute, and the physics of I²R: a winding at its rating sheds about I_cont²·R |
 
