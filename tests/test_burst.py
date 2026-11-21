@@ -182,7 +182,10 @@ def test_update_all_tracks_every_arm_drive():
 
 
 def test_flux_braking_heat_counts_as_the_current_that_would_make_it():
-    from robot_thermal.burst import flux_brake_heat_w
+    from robot_thermal.burst import bus_regen_w, flux_brake_heat_w
+
+    assert bus_regen_w([10.0, -5.0, 2.0], [-1.0, 2.0, 3.0]) == pytest.approx(10.0 + 10.0)
+    assert "J2" in arm.FLUX_BRAKING and "J1" not in arm.FLUX_BRAKING
 
     j2 = arm.RULES["J2"]
     assert flux_brake_heat_w(10.0, 1.0) == 0.0  # motoring: nothing comes back

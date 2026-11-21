@@ -122,7 +122,8 @@ def update(
     """Predict to `t_s` on the current since the last update, then fuse whichever measurements are given.
 
     `current_a` is the phase-current magnitude √(i_q² + i_d²) at `t_s`. `extra_heat_w` is winding heat the current
-    does not show, e.g. `burst.flux_brake_heat_w(τ, ω)` when d current is not logged.
+    does not show: flux braking on a drive whose d current is not logged. `burst.flux_brake_heat_w(τ, ω)` estimates
+    it for this drive; `burst.bus_regen_w` over every drive bounds it.
     """
     current_a = abs(float(current_a))
     x, cov, hot_x = _predict(p, hot, s, t_s, current_a, config, extra_heat_w)

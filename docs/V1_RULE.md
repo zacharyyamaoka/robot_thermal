@@ -27,11 +27,15 @@ uses min(board cap, rule), so the boards' own `servo.max_current_A` still binds 
 (job `1120-175952-740f`) never touches a bucket, but J2's 11.6 A peak sits just under its 12 A I_cont, so any faster
 run starts spending J2's budget.
 
-**Flux braking counts as heat.** J2 runs `servo.max_regen_power_W` 0, so moteus burns regenerated energy as d-axis
-current in the winding (limiter code 104, on 62 % of J2's replies at 1.0). The logs carry q current but not d, so the
-rule adds the regenerated power max(0, −τ·ω), its upper bound, as the current that would make that heat:
-I² = W / (1.5·R_phase). At 1.0 it is 5 J against 181 J of q copper loss on J2. It grows with speed, so it counts.
-Logging d current (moteus reports it) would replace the bound with the real figure.
+**Flux braking counts as heat.** J2 runs `servo.max_regen_power_W` 0 (the only board that does: `fivebar_test_1120/
+board_cfg.json`). So moteus burns J2's regenerated energy as d-axis current in its winding: limiter code 104, on 62 % of
+J2's replies at 1.0.
+- **With d current logged** (lane J logs `d_A` per drive since belt_u v2): feed √(i_q² + i_d²), no extra term.
+- **Without it:** add `bus_regen_w`, the regenerated power of every drive on the shared bus, Σ max(0, −τᵢ·ωᵢ), as
+  extra heat, I² = W / (1.5·R_phase). No drive can burn more than the whole bus regenerates.
+- **Measured, belt_u v2 (job 1120-205047-29d5):** J2's d-axis heat was 2.45 J. J2's own regen, `flux_brake_heat_w`,
+  gave 2.39 J, about 3 % short, because τ is the board's kt·i_q estimate. So its own regen is an estimate, not a bound;
+  the bus figure, 4.60 J, bounds it (`tests/test_flux_brake_real.py`).
 
 ## Where every number comes from
 
@@ -78,13 +82,15 @@ The winding limits behind it:
 ## In code
 
 ```python
-from robot_thermal.burst import BurstState, flux_brake_heat_w, update, verdict
-from robot_thermal.drives.arm import HOLD_CURRENT_A, RULES   # J1 J2 C1 W1 W2 W3 CLAW
+import math
+
+from robot_thermal.burst import BurstState, bus_regen_w, update, verdict
+from robot_thermal.drives.arm import FLUX_BRAKING, HOLD_CURRENT_A, RULES   # J1 J2 C1 W1 W2 W3 CLAW
 
 states = {name: BurstState() for name in RULES}
 # every tick, per drive:
-states[j] = update(RULES[j], states[j], t_s, abs(q_current_a), board_temperature_c,
-                   extra_heat_w=flux_brake_heat_w(torque_nm, velocity_rad_s))   # J2: max_regen_power_W 0
+states[j] = update(RULES[j], states[j], t_s, math.hypot(q_current_a, d_current_a), board_temperature_c)
+# without d logged: abs(q_current_a), and for j in FLUX_BRAKING extra_heat_w=bus_regen_w(all torques, all velocities)
 v = verdict(RULES[j], states[j], rest_current_a=HOLD_CURRENT_A[j])
 limit_nm = v.current_limit_a * kt          # clamp |torque command| to this
 # v.may_burst, v.reason ("ok" | "budget_spent" | "board_hot"), v.burst_s_left, v.next_full_burst_in_s

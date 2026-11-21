@@ -47,5 +47,10 @@ RULES = {
     "CLAW": _wrist("CLAW"),  # CAN 17: 1.94 / 6.72 A
 }
 
+# Drives that burn regenerated energy in their own winding (flux braking): servo.max_regen_power_W 0. SOURCE:
+# /home/bam/arm_motion_bench/outputs/bam_fb/real/fivebar_test_1120/board_cfg.json (CAN 12 is 0, CAN 11 and 13-16 nan,
+# i.e. they return it to the bus). Without logged d current these drives take `burst.bus_regen_w` as extra heat.
+FLUX_BRAKING = frozenset({"J2"})
+
 # A: what each drive draws between bursts, for the verdict's refill forecast (HEADROOM_1120.md, dev000 at 1.0).
 HOLD_CURRENT_A = {"J1": 0.0, "J2": 10.0, "C1": 5.0, "W1": 0.55, "W2": 0.1, "W3": 0.2, "CLAW": 0.0}
