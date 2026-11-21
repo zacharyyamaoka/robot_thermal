@@ -12,17 +12,19 @@ from robot_thermal.burst_rule import BurstRule
 
 rule = BurstRule(
     name="jmc-60asm400+ad60-10",
-    # SOURCE: JMC's drawing rates 14.5 A RMS phase current (the seller's list says 16 A); moteus q_A is the
-    # phase-current amplitude, so 14.5·√2 = 20.5 A. The maker's own document for this exact model wins over the list.
-    continuous_current_a=20.5,
-    # SOURCE: the boards' servo.max_current_A, 28.1 A since 2026-11-19, which is 18 N·m at the gearbox output (the
-    # AD60's maximum permissible torque, the limit Zach kept on 2026-11-20) at torque_caps.py's 0.64 N·m/A.
-    peak_current_a=28.1,
+    # SOURCE, the smaller of two: the moteus r4.11's own "Continuous phase current: 12A / 32A (w/o and w/ thermal
+    # management)" (mjbots shop page, robotparts mjbots-moteus-r4-11), 12 A uncooled, binds before the motor's JMC
+    # drawing rating of 14.5 A RMS = 20.5 A amplitude (moteus q_A is the amplitude).
+    continuous_current_a=12.0,
+    # SOURCE: the AD60's 18 N·m maximum permissible output torque (the limit Zach kept, 2026-11-20) over this drive's
+    # kt. kt differs per drive (arm.py sets each); this type default is the lowest current of the three, C1's:
+    # 18 / 0.7906 N·m/A (10 × 8.270 / Kv 104.607, fivebar-bench deployment.json) = 22.8 A.
+    peak_current_a=22.77,
     burst_s=5.0,  # SOURCE: Zach, 2026-11-20, "only allow to burst for like 5s every 1 minute"
     period_s=60.0,  # SOURCE: the same words
     # SOURCE: the board's own config: moteus derates from fault_temperature − temperature_margin = 80 − 20 = 60 °C.
     board_burst_off_c=60.0,
     # not a cap: 5 °C of hysteresis only delays re-arming bursts, so the verdict does not chatter at 60 °C
     board_burst_on_c=55.0,
-    source="JMC drawing 14.5 A RMS; board max_current_A 28.1 (= AD60 18 N.m); Zach 5 s/60 s; moteus derate 60 C",
+    source="r4.11 12 A continuous uncooled (< JMC 20.5 A); AD60 18 N.m / kt per drive; Zach 5 s/60 s; moteus derate 60 C",
 )

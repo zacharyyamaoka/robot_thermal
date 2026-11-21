@@ -40,9 +40,14 @@ def test_the_proposed_margins_pass(name):
     assert ok, why
 
 
-@pytest.mark.xfail(strict=True, reason="FINDING, Zach's call: the datasheet rules fail v2's hot bound (see "
+def test_the_jmc_datasheet_rule_passes():
+    """With the r4.11's own 12 A continuous rating binding, the shoulders' cited rule passes."""
+    ok, why = passes(jmc_60asm400_ad60.rule, THERMAL[jmc_60asm400_ad60.rule.name])
+    assert ok, why
+
+
+@pytest.mark.xfail(strict=True, reason="FINDING, Zach's call: the GIM's datasheet rule fails v2's hot bound (see "
                                        "drives/proposed_margins.py for the evidence and the cost)")
-@pytest.mark.parametrize("rule", [jmc_60asm400_ad60.rule, gim4305_10.rule], ids=["jmc", "gim"])
-def test_the_datasheet_rules_pass(rule):
-    ok, why = passes(rule, THERMAL[rule.name])
+def test_the_gim_datasheet_rule_passes():
+    ok, why = passes(gim4305_10.rule, THERMAL[gim4305_10.rule.name])
     assert ok, why

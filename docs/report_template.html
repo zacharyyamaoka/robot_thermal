@@ -77,36 +77,31 @@ never below 0; C = (I_peak² − I_cont²)·5 s. While the bucket is under C and
 the drive may go to I_peak; otherwise it clamps to I_cont until the bucket empties. <b>Every number is cited: a datasheet,
 the boards' own config, or Zach's words</b> (his standing no-artificial-guards rule).</p>
 <ul>
-<li><b>Shoulders J1/J2/C1</b> (JMC 60ASM400 + AD60): I_cont {jmc_ic:.1f} A (JMC's drawing: 14.5 A RMS = 20.5 A amplitude),
-I_peak {jmc_ip:.1f} A (the boards' cap = the AD60's 18 N·m). 5 s at the cap, refilled in {jmc_refill:.0f} s at rest.</li>
-<li><b>Wrists and claw</b> (GIM4305-10): I_cont {gim_ic:.2f} A (rated 1.05 N·m), I_peak {gim_ip:.1f} A (peak 3.82 N·m). 5 s at
-the peak, refilled in {gim_refill:.0f} s, because at 3.6× continuous the copper's cooling sets the refill. Today's 2.0 A
-board cap sits below I_cont.</li>
+<li><b>Shoulders J1/J2/C1</b> (JMC 60ASM400 + AD60, moteus r4.11): I_cont {jmc_ic:.0f} A, the r4.11's own continuous
+rating uncooled, below the motor's 20.5 A. I_peak {sh_ip}, which is the AD60's 18 N·m over each drive's own kt. 5 s at the
+peak, refilled in {jmc_refill:.0f} s at rest.</li>
+<li><b>Wrists and claw</b> (GIM4305-10): I_cont {wr_ic} and I_peak {wr_ip}, from SteadyWin's GDS34 nominal 1.0 and stall
+3.47 N·m over each drive's own kt. 5 s at the peak, refilled in 55 s. Today's 2.0 A board cap binds first.</li>
 <li><b>Board cut at 60 °C:</b> where moteus starts its own derate (fault 80 − margin 20).</li>
 <li>The refill is the slower of Zach's minute and the copper's I_cont² cooling. So over any run the I²·t delivered is at
 most I_cont²·T plus the heat still in the bucket (a greedy controller, 30 min, <code>tests/test_burst.py</code>).</li>
 </ul>
 </div>
-<div class="box warn"><b>Recommended margins, waiting on Zach (not applied).</b> The datasheet rules fail v2's own
-pessimistic check: a long hold at I_cont in a 30 °C room, then a full burst.
-<ul>
-<li><b>GIM:</b> the 2.06 A hold alone settles the winding at 78 °C (prior) / 103 °C (hot bound), against SteadyWin's
-only stated temperature, 80 °C. The proposal is I_cont 1.5 A and I_peak 4.2 A, which costs 27 % continuous and 44 % burst
-torque. It is moot while the wrist boards cap at 2.0 A.</li>
-<li><b>JMC:</b> a hold at 20.5 A reaches 130 / 204 °C against IEC 60034-1's 145 °C class-F limit. The proposal is I_cont
-17 A, which costs 17 % continuous torque and has no effect at tonight's loads.</li>
-</ul>
-The winding parameters behind this are physics priors, so it is evidence, not a measurement; E1 settles it
+<div class="box warn"><b>One recommended margin, waiting on Zach (not applied).</b> v2's own pessimistic check is a
+long hold at I_cont in a 30 °C room, then a full burst. The shoulders' cited rule passes it. The wrists' cited rule fails
+it: held at W1's 1.90 A, the hot-bound winding settles above SteadyWin's only stated temperature, 80 °C. The proposal is
+I_cont 1.5 A and I_peak 4.2 A, which costs 21 % continuous and 36 % burst torque on W1 and is moot while the wrist boards
+cap at 2.0 A. The winding parameters behind it are physics priors, so it is evidence, not a measurement; E1 settles it
 (<code>drives/proposed_margins.py</code>, <code>tests/test_v1_v2.py</code>).</div>
 <figure><img src="{burst_png}" alt="burst budget folding back a greedy controller">
-<figcaption>A controller that asks for 8 s at 28.1 A once a minute, holding 10 A in between, gets 5 s, then folds back to
+<figcaption>A controller that asks for 8 s at J2's peak once a minute, holding 10 A in between, gets 5 s, then folds back to
 I_cont. The 52 s at 10 A before the next ask refill about 95 % of the budget (a full refill takes 55 s), so each later
 burst gets just under 5 s.</figcaption></figure>
 <h3>Tonight's 1.0 run through the rule (job 1120-175952-740f)</h3>
 <table><tr><th>drive</th><th>peak A</th><th>RMS A</th><th>I_cont / I_peak</th><th>budget low-water</th><th>board max °C</th></tr>
 {rep_rows}</table>
-<p>No bucket is touched. On the shoulders 28.1 A is only 1.4× the rated current, so a 5 s burst cannot cook a JMC winding;
-there the rule bounds RMS over minutes, and the board is the nearer limit (section 5). The wrists are where bursts above continuous are a real thermal question. The rig owner
+<p>No bucket is touched, but J2's 11.6 A peak sits just under its 12 A I_cont, so any faster run starts spending J2's
+budget. On the shoulders the board is the nearer limit (section 5). The wrists are where bursts above continuous are a real thermal question. The rig owner
 now gates each fast arm submit on this rule, using the twin's predicted current, and replays every real run through
 <code>tools/replay_v1.py</code>.</p>
 
@@ -239,8 +234,8 @@ because the rig's loop must import the core with nothing installed. Undo: move <
 </ul>
 <h3>Needs Zach</h3>
 <ul>
-<li><b>The recommended margins above</b> (GIM 1.5 / 4.2 A, JMC 17 A continuous). My recommendation is to wait for E1
-rather than apply them: the wrist boards cap at 2.0 A anyway, and the shoulders' tonight loads sit far below 17 A.</li>
+<li><b>The wrist margin above</b> (I_cont 1.5 A, I_peak 4.2 A). My recommendation is to wait for E1 rather than apply
+it: the wrist boards cap at 2.0 A anyway.</li>
 <li><b>The GIM's winding limit.</b> SteadyWin publishes none; 80 °C is its ambient working range. A class (B 130 °C /
 F 155 °C) from SteadyWin, or E1's measurement, would replace it.</li>
 </ul>

@@ -47,7 +47,7 @@ def test_full_strength_burst_lasts_burst_s():
 def test_weaker_burst_lasts_longer_and_continuous_is_free():
     fresh = BurstState()
     assert burst_seconds_at(JMC, fresh, JMC.peak_current_a) == pytest.approx(JMC.burst_s)
-    currents = [21.0, 23.0, 26.0, 28.1]
+    currents = [14.0, 17.0, 20.0, JMC.peak_current_a]
     seconds = [burst_seconds_at(JMC, fresh, i) for i in currents]
     assert all(a > b for a, b in zip(seconds, seconds[1:]))
     assert burst_seconds_at(JMC, fresh, JMC.continuous_current_a) == math.inf
@@ -61,9 +61,9 @@ STEEP = BurstRule(name="steep", continuous_current_a=1.5, peak_current_a=7.5)
 
 
 def test_refill_follows_the_rule_below_3_46x_and_the_physics_above():
-    # JMC 28.1/20.5 = 1.4x continuous: Zach's 60 s period binds, 55 s to refill at rest
+    # JMC 22.8/12 = 1.9x continuous: Zach's 60 s period binds, 55 s to refill at rest
     assert JMC.refill_at_rest_s == pytest.approx(55.0)
-    # GIM 7.5/2.06 = 3.6x and STEEP 5x continuous: the copper's I_cont² cooling binds
+    # GIM 6.61/1.90 = 3.47x and STEEP 5x continuous: the copper's I_cont² cooling binds
     for rule in (GIM, STEEP):
         assert rule.peak_to_continuous > math.sqrt(rule.period_s / rule.burst_s)
         assert rule.refill_at_rest_s == pytest.approx(rule.capacity_a2s / rule.continuous_current_a**2)
@@ -176,5 +176,6 @@ def test_update_all_tracks_every_arm_drive():
     states = update_all(arm.RULES, states, 0.0, {"J2": 10.0, "W1": 0.5}, {"J2": 42.0})
     states = update_all(arm.RULES, states, 1.0, {"J2": 28.1, "W1": 0.5}, {"J2": 42.0})
     assert set(states) == set(arm.RULES)
-    assert states["J2"].heat_a2s == pytest.approx(28.1**2 - 20.5**2)
+    assert states["J2"].heat_a2s == pytest.approx(28.1**2 - 12.0**2)
+    assert arm.RULES["J2"].peak_current_a == pytest.approx(18.0 / 0.7396, rel=1e-6)
     assert states["J1"] == BurstState()

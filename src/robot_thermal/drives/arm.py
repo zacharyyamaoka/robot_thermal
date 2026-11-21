@@ -1,17 +1,42 @@
-"""Which rule each drive of the five-bar arm (bam_fb_v2) runs, by the joint names the rig logs use."""
+"""Which rule each drive of the five-bar arm (bam_fb_v2) runs, by the joint names the rig logs use.
+
+Every current is a torque over THAT drive's own kt, so the caps are per drive (the rig owner's reconciliation,
+2026-11-20). kt at the output = 10 × 8.270 / Kv (moteus's torque factor; Kv the board's own calibration).
+"""
 
 from dataclasses import replace
 
 from robot_thermal.drives import gim4305_10, jmc_60asm400_ad60
 
+GEARBOX_MAX_NM = 18.0  # SOURCE: the AD60 10:1's maximum permissible output torque, the limit Zach kept (2026-11-20)
+GIM_NOMINAL_NM = 1.0  # SOURCE: SteadyWin GIM4305-10, GDS34 column, nominal torque
+GIM_STALL_NM = 3.47  # SOURCE: the same column's stall torque (no duration published)
+
+# N·m/A at the output. SOURCE: J1/J2/C1/CLAW from /home/bam/bam_ws-armhold/src/dev/bam_rack_twin/records/
+# fivebar-bench/deployment.json (Kv 113.834 / 111.824 / 104.607 / 160.251); W1-W3 from the wrist datasheet check
+# (Kv 157.474 / 163.385 / 160.055).
+KT_OUT_NM_PER_A = {"J1": 0.7265, "J2": 0.7396, "C1": 0.7906, "W1": 0.5252, "W2": 0.5062, "W3": 0.5167,
+                   "CLAW": 0.5161}
+
+
+def _shoulder(name: str):
+    return replace(jmc_60asm400_ad60.rule, name=name, peak_current_a=GEARBOX_MAX_NM / KT_OUT_NM_PER_A[name])
+
+
+def _wrist(name: str):
+    kt = KT_OUT_NM_PER_A[name]
+    return replace(gim4305_10.rule, name=name, continuous_current_a=GIM_NOMINAL_NM / kt,
+                   peak_current_a=GIM_STALL_NM / kt)
+
+
 RULES = {
-    "J1": replace(jmc_60asm400_ad60.rule, name="J1"),  # CAN 11
-    "J2": replace(jmc_60asm400_ad60.rule, name="J2"),  # CAN 12, holds about 10 A against gravity
-    "C1": replace(jmc_60asm400_ad60.rule, name="C1"),  # CAN 13
-    "W1": replace(gim4305_10.rule, name="W1"),  # CAN 14
-    "W2": replace(gim4305_10.rule, name="W2"),  # CAN 15
-    "W3": replace(gim4305_10.rule, name="W3"),  # CAN 16
-    "CLAW": replace(gim4305_10.rule, name="CLAW"),  # CAN 17
+    "J1": _shoulder("J1"),  # CAN 11: 24.8 A peak
+    "J2": _shoulder("J2"),  # CAN 12: 24.3 A peak; holds about 10 A against gravity
+    "C1": _shoulder("C1"),  # CAN 13: 22.8 A peak
+    "W1": _wrist("W1"),  # CAN 14: 1.90 / 6.61 A
+    "W2": _wrist("W2"),  # CAN 15: 1.98 / 6.86 A
+    "W3": _wrist("W3"),  # CAN 16: 1.94 / 6.72 A
+    "CLAW": _wrist("CLAW"),  # CAN 17: 1.94 / 6.72 A
 }
 
 # A: what each drive draws between bursts, for the verdict's refill forecast (HEADROOM_1120.md, dev000 at 1.0).

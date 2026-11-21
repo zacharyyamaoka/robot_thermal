@@ -66,12 +66,12 @@ def git_sha() -> str:
 
 def fig_burst():
     """A greedy controller asks for 28.1 A for 8 s every 20 s on a JMC drive; the rule folds it back."""
-    rule, p = JMC_RULE, JMC_T
+    rule, p = arm.RULES["J2"], JMC_T
     s, x = bu.update(rule, bu.BurstState(), 0.0, 0.0, 30.0), [25.0, 25.0, 30.0, 22.0]
     dt, ts, want, got, left, board = 0.05, [], [], [], [], []
     t = 0.0
     while t < 300.0:
-        demand = 28.1 if (t % 60.0) < 8.0 else 10.0
+        demand = rule.peak_current_a if (t % 60.0) < 8.0 else 10.0
         lim = bu.verdict(rule, s, 10.0).current_limit_a
         i = min(demand, lim)
         t += dt
@@ -91,7 +91,7 @@ def fig_burst():
     ax[1].set_ylabel("budget left (%)")
     ax[1].set_xlabel("time (s) — J2-like drive holding 10 A between bursts")
     ax[1].set_ylim(-5, 105)
-    fig.suptitle("v1 burst budget, JMC shoulder: 8 s asked every minute, 5 s given, refilled over the minute",
+    fig.suptitle(f"v1 burst budget, J2: 8 s at {rule.peak_current_a:.1f} A asked every minute, 5 s given, refilled over the minute",
                  fontsize=10, x=0.01, ha="left")
     return png(fig)
 
@@ -303,6 +303,12 @@ def main() -> None:
 
     page = TEMPLATE.format(
         n_pass=n_pass, n_xfail=n_xfail,
+        sh_ip="{:.1f}-{:.1f} A".format(min(arm.RULES[j].peak_current_a for j in ("J1", "J2", "C1")),
+                                       max(arm.RULES[j].peak_current_a for j in ("J1", "J2", "C1"))),
+        wr_ic="{:.2f}-{:.2f} A".format(min(arm.RULES[j].continuous_current_a for j in ("W1", "W2", "W3")),
+                                       max(arm.RULES[j].continuous_current_a for j in ("W1", "W2", "W3"))),
+        wr_ip="{:.2f}-{:.2f} A".format(min(arm.RULES[j].peak_current_a for j in ("W1", "W2", "W3")),
+                                       max(arm.RULES[j].peak_current_a for j in ("W1", "W2", "W3"))),
         jmc_ic=JMC_RULE.continuous_current_a, jmc_ip=JMC_RULE.peak_current_a, jmc_refill=JMC_RULE.refill_at_rest_s,
         gim_ic=GIM_RULE.continuous_current_a, gim_ip=GIM_RULE.peak_current_a, gim_refill=GIM_RULE.refill_at_rest_s,
         gim_at_cap=bu.burst_seconds_at(GIM_RULE, bu.BurstState(), 2.0),
