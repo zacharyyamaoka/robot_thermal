@@ -185,7 +185,10 @@ def test_flux_braking_heat_counts_as_the_current_that_would_make_it():
     from robot_thermal.burst import bus_regen_w, flux_brake_heat_w
 
     assert bus_regen_w([10.0, -5.0, 2.0], [-1.0, 2.0, 3.0]) == pytest.approx(10.0 + 10.0)
-    assert "J2" in arm.FLUX_BRAKING and "J1" not in arm.FLUX_BRAKING
+    # EDITED 2026-11-22 (lane J; the dispatcher's regen decision, step 1b flashes servo.max_regen_power_W = 0 on J1 / C1 / W1): was
+    # "J2 in, J1 not in"; J1 / J2 / C1 / W1 now burn their own regen, W2 / W3 / the claw still return it to the bus
+    assert arm.FLUX_BRAKING == frozenset({"J1", "J2", "C1", "W1"})
+    assert not {"W2", "W3", "CLAW"} & arm.FLUX_BRAKING
 
     j2 = arm.RULES["J2"]
     assert flux_brake_heat_w(10.0, 1.0) == 0.0  # motoring: nothing comes back
