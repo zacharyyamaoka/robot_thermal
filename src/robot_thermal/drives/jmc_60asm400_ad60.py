@@ -17,7 +17,8 @@ rule = BurstRule(
     # drawing rating of 14.5 A RMS = 20.5 A amplitude (moteus q_A is the amplitude).
     continuous_current_a=12.0,
     # SOURCE: the AD60's 18 N·m maximum permissible output torque (the limit Zach kept, 2026-11-20) over this drive's
-    # kt. kt differs per drive (arm.py sets each); this type default is the lowest current of the three, C1's:
+    # kt. kt differs per drive (arm.py sets each); this type default is the lowest current of the three, the Kv 104.607 motor's (C1 until
+    # 2026-11-22, J2 since the CAN 12 / 13 swap):
     # 18 / 0.7906 N·m/A (10 × 8.270 / Kv 104.607, fivebar-bench deployment.json) = 22.8 A.
     peak_current_a=22.77,
     burst_s=5.0,  # SOURCE: Zach, 2026-11-20, "only allow to burst for like 5s every 1 minute"

@@ -177,7 +177,7 @@ def test_update_all_tracks_every_arm_drive():
     states = update_all(arm.RULES, states, 1.0, {"J2": 28.1, "W1": 0.5}, {"J2": 42.0})
     assert set(states) == set(arm.RULES)
     assert states["J2"].heat_a2s == pytest.approx(28.1**2 - 12.0**2)
-    assert arm.RULES["J2"].peak_current_a == pytest.approx(18.0 / 0.7396, rel=1e-6)
+    assert arm.RULES["J2"].peak_current_a == pytest.approx(18.0 / 0.7906, rel=1e-6)  # TEST EDITED 2026-11-22: the CAN 12 / 13 swap (J2's motor is Kv 104.607)
     assert states["J1"] == BurstState()
 
 
@@ -198,3 +198,15 @@ def test_flux_braking_heat_counts_as_the_current_that_would_make_it():
     assert b.heat_a2s - a.heat_a2s == pytest.approx(20.0 / (1.5 * j2.phase_resistance_ohm), rel=1e-9)
     with pytest.raises(ValueError):
         update(JMC, BurstState(), 0.0, 1.0, extra_heat_w=5.0)  # the type rule carries no resistance
+
+
+def test_the_can_12_13_swap_moves_the_per_motor_values_with_the_motors():
+    """2026-11-22 (Zach: "can you please swtich CAn 12 and 13 I put them on the wrong way"; plan A): each actuator (board on its motor) went
+    to the other five-bar joint, so J2 is now the Kv 104.607 / 0.086851 ohm motor and C1 the Kv 111.824 / 0.080294 ohm one. Per-motor values
+    (kt, phase R, the 18 N.m / kt peak) move; per-joint ones (the gravity hold current) stay."""
+
+    assert arm.KT_OUT_NM_PER_A["J2"] == pytest.approx(0.7906) and arm.KT_OUT_NM_PER_A["C1"] == pytest.approx(0.7396)
+    assert arm.PHASE_RESISTANCE_OHM["J2"] == pytest.approx(0.086851) and arm.PHASE_RESISTANCE_OHM["C1"] == pytest.approx(0.080294)
+    assert arm.RULES["J2"].peak_current_a == pytest.approx(18.0 / 0.7906, rel=1e-6)
+    assert arm.RULES["C1"].peak_current_a == pytest.approx(18.0 / 0.7396, rel=1e-6)
+    assert arm.HOLD_CURRENT_A["J2"] == 10.0 and arm.HOLD_CURRENT_A["C1"] == 5.0

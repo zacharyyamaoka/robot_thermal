@@ -13,16 +13,19 @@ GIM_NOMINAL_NM = 1.0  # SOURCE: SteadyWin GIM4305-10, GDS34 column, nominal torq
 GIM_STALL_NM = 3.47  # SOURCE: the same column's stall torque (no duration published)
 
 # N·m/A at the output. SOURCE: J1/J2/C1/CLAW from /home/bam/bam_ws-armhold/src/dev/bam_rack_twin/records/
-# fivebar-bench/deployment.json (Kv 113.834 / 111.824 / 104.607 / 160.251); W1-W3 from the wrist datasheet check
+# fivebar-bench/deployment.json (Kv 113.834 / 104.607 / 111.824 / 160.251); W1-W3 from the wrist datasheet check
 # (Kv 157.474 / 163.385 / 160.055).
-KT_OUT_NM_PER_A = {"J1": 0.7265, "J2": 0.7396, "C1": 0.7906, "W1": 0.5252, "W2": 0.5062, "W3": 0.5167,
+# WHY J2 0.7906 / C1 0.7396 (2026-11-22, Zach: "can you please swtich CAn 12 and 13 I put them on the wrong way"): the reassembly put
+# each five-bar actuator (moteus board bolted on its motor) on the other joint; the ids were swapped back to the joints (plan A), so
+# J2 is now the Kv 104.607 motor and C1 the Kv 111.824 one. kt and phase R are the MOTOR's and moved with it.
+KT_OUT_NM_PER_A = {"J1": 0.7265, "J2": 0.7906, "C1": 0.7396, "W1": 0.5252, "W2": 0.5062, "W3": 0.5167,
                    "CLAW": 0.5161}
 
 
 # Ω per phase, for counting flux-braking heat. SOURCE: J1/J2/C1/CLAW the boards' motor.resistance_ohm in the
 # fivebar-bench deployment.json; W1 0.6305 and, for W2/W3, the low end (0.625) of the arm wrists' calibrated
 # 0.625-0.642 Ω (wrist datasheet check): a lower R counts a watt as more I², the cautious side of a measured range.
-PHASE_RESISTANCE_OHM = {"J1": 0.0871016, "J2": 0.080294, "C1": 0.086851, "W1": 0.6305, "W2": 0.625, "W3": 0.625,
+PHASE_RESISTANCE_OHM = {"J1": 0.0871016, "J2": 0.086851, "C1": 0.080294, "W1": 0.6305, "W2": 0.625, "W3": 0.625,
                         "CLAW": 0.669335}
 
 
@@ -39,8 +42,8 @@ def _wrist(name: str):
 
 RULES = {
     "J1": _shoulder("J1"),  # CAN 11: 24.8 A peak
-    "J2": _shoulder("J2"),  # CAN 12: 24.3 A peak; holds about 10 A against gravity
-    "C1": _shoulder("C1"),  # CAN 13: 22.8 A peak
+    "J2": _shoulder("J2"),  # CAN 12: 22.8 A peak (the Kv 104.607 motor since 2026-11-22); holds about 10 A against gravity
+    "C1": _shoulder("C1"),  # CAN 13: 24.3 A peak (the Kv 111.824 motor since 2026-11-22)
     "W1": _wrist("W1"),  # CAN 14: 1.90 / 6.61 A
     "W2": _wrist("W2"),  # CAN 15: 1.98 / 6.86 A
     "W3": _wrist("W3"),  # CAN 16: 1.94 / 6.72 A
