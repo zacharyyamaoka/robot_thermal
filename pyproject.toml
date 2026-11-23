@@ -10,6 +10,17 @@ readme = "README.md"
 license = "MIT"
 authors = [{ name = "Zach Yamaoka" }]
 requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
 # WHY no runtime dependency: the burst budget and the thermal observer run inside a rig's control loop, so they are
 # standard-library only (tests/test_boundary.py proves it). robot_msgs is the `msgs` extra: only the ServoState
 # adapter needs it. numpy/scipy/matplotlib are test oracles and report tooling, never runtime imports.
@@ -19,6 +30,10 @@ dependencies = []
 msgs = ["robot-msgs>=0.3.0"]
 test = ["pytest>=8", "numpy>=1.26", "scipy>=1.11", "robot-msgs>=0.3.0"]
 report = ["numpy>=1.26", "scipy>=1.11", "matplotlib>=3.8", "pytest>=8"]
+
+[project.urls]
+Homepage = "https://github.com/zacharyyamaoka/robot_thermal"
+Repository = "https://github.com/zacharyyamaoka/robot_thermal"
 
 [tool.uv.sources]
 robot-msgs = { path = "../robot_msgs", editable = true }
