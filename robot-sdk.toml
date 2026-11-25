@@ -5,5 +5,12 @@ schema = "robot-sdk-declaration/1"
 role = "library"
 layer = "leaf"
 one_line = "Motor and board heat tracking with burst-limit decisions"
+summary = "Running servo motors above their continuous rating in short bursts, safely. v1: an I²t burst budget per drive plus a hard cut on board temperature. v2: a lumped thermal network per drive, fed by logged current, with a Kalman observer. Standard library at runtime."
+use_when = "Motor or board heat, burst limits, duty cycles, how hard a joint may be pushed."
+
+# Where to read more. github and pypi are required; the rest are what this package has.
+[links]
+github = "https://github.com/zacharyyamaoka/robot_thermal"
+pypi = "https://pypi.org/project/robot-thermal/"
 
 # The core takes plain floats; robot_msgs is only the optional [msgs] extra, so the public API names no shared type.
